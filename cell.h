@@ -3,6 +3,25 @@
 
 #include <stdint.h>
 
+#ifdef __propeller__
+#define SMALL
+#endif
+
+#ifdef SMALL
+// a Cell is a 32 bit integer, holding
+// two 14 bit pointers (low bits assumed 0)
+// and a 4 bit tag
+// or, a 28 bit signed integer with 4 bit tag
+// the tag is in the lowest 4 bits for ease of
+// extraction
+// the tag is further divided into a 3 bit type
+// and 1 used bit for garbage collection: gttt
+//
+
+typedef uint32_t Cell;
+typedef int32_t Num;
+typedef uint32_t UNum;
+#else
 // a Cell is a 64 bit integer, holding
 // two 30 bit pointers (low bits assumed 0)
 // and a 4 bit tag
@@ -16,10 +35,12 @@
 typedef uint64_t Cell;
 typedef int64_t Num;
 typedef uint64_t UNum;
+#endif
 
 static inline uint32_t FromPtr(void *ptr) {
     uint32_t v = (uint32_t)ptr;
-    return v>>2;
+    v = v>>2;
+    return v;
 }
 static inline void *ToPtr(uint32_t v) {
     v = v<<2;
@@ -29,7 +50,13 @@ static inline void *ToPtr(uint32_t v) {
 static inline int GetUsed(Cell *ptr) { return (*ptr) & 0x08; }
 static inline int GetType(Cell *ptr) { return (*ptr) & 0x07; }
 
+#ifdef SMALL
+#define PTRMASK 0x3FFF
+#define HEADSHIFT 18
+#else
 #define PTRMASK 0x3FFFFFFF
+#define HEADSHIFT 34
+#endif
 
 static inline uint32_t GetTailVal(Cell *ptr) {
     Cell v = *ptr;
@@ -38,7 +65,7 @@ static inline uint32_t GetTailVal(Cell *ptr) {
 }
 static inline uint32_t GetHeadVal(Cell *ptr) {
     Cell v = *ptr;
-    v = v>>34LL;
+    v = v>>HEADSHIFT;
     return ((uint32_t)v) & PTRMASK;
 }
 static inline void *GetTail(Cell *ptr) {
@@ -67,7 +94,7 @@ static inline Num GetNum(Cell *ptr) {
 static void SetTail(Cell *ptr, Cell *val) {
     Cell r = *ptr;
     uint32_t v = FromPtr(val);
-    r &= ~ ((Cell)0x3FFFFFFF<<4);
+    r &= ~ ((Cell)PTRMASK<<4);
     r |= v<<4;
     *ptr = r;
 }
@@ -89,7 +116,7 @@ static inline Cell CellNum(Num val) {
 
 static inline Cell CellPair(int typ, uint32_t head, uint32_t tail) {
     uint32_t h, t;
-    return (((Cell)head) <<34) | (((Cell)tail)<<4) | (typ & 0x7);
+    return (((Cell)head) <<HEADSHIFT) | (((Cell)tail)<<4) | (typ & 0x7);
 }
 
 #endif

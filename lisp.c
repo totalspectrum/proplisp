@@ -19,6 +19,7 @@ typedef struct {
 
 Cell *globalEnv;
 Cell *globalTrue;
+Cell *globalQuote;
 
 Cell *Alloc() {
     return (Cell *)malloc(sizeof(Cell));
@@ -214,6 +215,12 @@ Cell *Print(Cell *str) {
     return NULL;
 }
 
+// quote
+Cell *Quote(Cell *a)
+{
+    return a;
+}
+
 // cons two cells
 Cell *Cons(Cell *head, Cell *tail)
 {
@@ -385,11 +392,36 @@ Cell *ReadListFromString(const char **str_p)
     }
 }
 
+Cell *CallCFunc(Cell *args, Cell *env)
+{
+    return NULL;
+}
+
+Cell *Eval(Cell *expr, Cell *env); // forward declaration
+
+Cell *doApply(Cell *fn, Cell *args, Cell *env)
+{
+    int typ;
+
+    fn = Eval(fn, env);
+    if (!fn) return NULL;
+    typ = GetType(fn);
+    if (typ == CELL_CFUNC) {
+        if (fn == globalQuote) {
+            return args ? GetHead(args) : NULL;
+        }
+        return globalTrue;
+    } else {
+        return NULL;
+    }
+}
+
 Cell *Eval(Cell *expr, Cell *env)
 {
     int typ;
     Cell *r;
-
+    Cell *f, *args;
+    
     if (!expr) return expr;
     typ = GetType(expr);
     switch (typ) {
@@ -408,13 +440,28 @@ Cell *Eval(Cell *expr, Cell *env)
             printcstr("\n");
         }
         return r;
+    case CELL_PAIR:
+        f = GetHead(expr);
+        args = GetTail(expr);
+        return doApply(f, args, env);
     }
 }
 
 BuiltinFunction cdefs[] = {
+    // quote must come first
+    { "quote", "ccc", (GenericFunc)Quote },
     { "cons", "ccc", (GenericFunc)Cons },
     { NULL, NULL, NULL }
 };
+
+static Cell *defCFunc(BuiltinFunction *f)
+{
+    Cell *name, *val;
+    name = CSymbol(f->name);
+    val = NewCFunc(name, f);
+    globalEnv = Define(name, val, globalEnv);
+    return val;
+}
 
 static void
 Init(void)
@@ -424,10 +471,11 @@ Init(void)
     globalEnv = NULL;
     globalTrue = CString("#t");
     globalEnv = Define(globalTrue, globalTrue, globalEnv);
-    for (f = cdefs; f->name; f++) {
-        name = CSymbol(f->name);
-        val = NewCFunc(name, f);
-        globalEnv = Define(name, val, globalEnv);
+    f = cdefs;
+    globalQuote = defCFunc(f);
+    f++;
+    for (; f->name; f++) {
+        defCFunc(f);
     }
 }
 
