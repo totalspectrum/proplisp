@@ -3,6 +3,20 @@
 #include <ctype.h>
 #include "cell.h"
 
+//
+// C functions that interface with Lisp may have up to 4 arguments
+// we have a string to describe the return value (first item) and arguments:
+//   i is a number
+//   c is a cell
+//
+typedef intptr_t (*GenericFunc)(intptr_t, intptr_t, intptr_t, intptr_t);
+
+typedef struct {
+    const char *name;
+    const char *args;
+    GenericFunc func;
+} BuiltinFunction;
+
 Cell *globalEnv;
 Cell *globalTrue;
 
@@ -17,6 +31,11 @@ Cell *NewPair(int typ, uint32_t head, uint32_t tail)
     return x;
 }
 
+Cell *NewCFunc(Cell *name, BuiltinFunction *f) {
+    Cell *x = Alloc();
+    *x = CellPair(CELL_CFUNC, FromPtr(name), FromPtr(f));
+    return x;
+}
 void printchar(int c) {
     putchar(c);
 }
@@ -42,6 +61,12 @@ Cell *CString(const char *str) {
     }
     rest = CString(str+1);
     x = NewPair(CELL_STRING, c, FromPtr(rest));
+    return x;
+}
+
+Cell *CSymbol(const char *str) {
+    Cell *x = CString(str);
+    SetType(x, CELL_SYMBOL);
     return x;
 }
 
@@ -160,13 +185,16 @@ Cell *Print(Cell *str) {
         Print(NumToString(str));
         break;
     case CELL_STRING:
+    case CELL_SYMBOL:
         PrintSymbol(str);
         break;
     case CELL_REF:
         Print(GetHead(str));
         break;
     case CELL_CFUNC:
-        printcstr("#<builtin>");
+        printcstr("#<builtin: ");
+        PrintSymbol(GetHead(str));
+        printcstr(">");
         break;
     case CELL_FUNC:
         printcstr("#<lambda>");
@@ -196,7 +224,7 @@ Cell *Cons(Cell *head, Cell *tail)
 Cell *Define(Cell *name, Cell *val, Cell *env)
 {
     Cell *x = NewPair(CELL_REF, FromPtr(name), FromPtr(val));
-    Cell *holder = Cons(name, env);
+    Cell *holder = Cons(x, env);
     return holder;
 }
 
@@ -249,6 +277,7 @@ Cell *Match(Cell *a, Cell *b)
     case CELL_NUM:
         return GetNum(a) == GetNum(b) ? globalTrue : NULL;
     case CELL_STRING:
+    case CELL_SYMBOL:
         return stringCmp(a, b) == 0 ? globalTrue : NULL;
     default:
         return NULL;
@@ -259,10 +288,13 @@ Cell *Match(Cell *a, Cell *b)
 Cell *Lookup(Cell *name, Cell *env)
 {
     Cell *holder = NULL;
+    Cell *hname = NULL;
     while (env) {
         holder = GetHead(env);
-        if (Match(GetHead(holder), name))
+        hname = GetHead(holder);
+        if (Match(hname, name)) {
             return holder;
+        }
         env = GetTail(env);
     }
     return NULL;
@@ -335,6 +367,7 @@ Cell *ReadItemFromString(const char **str_p)
     if (alldigits) {
         return StringToNum(result);
     }
+    SetType(result, CELL_SYMBOL);
     return result;
 }
 
@@ -352,12 +385,50 @@ Cell *ReadListFromString(const char **str_p)
     }
 }
 
+Cell *Eval(Cell *expr, Cell *env)
+{
+    int typ;
+    Cell *r;
+
+    if (!expr) return expr;
+    typ = GetType(expr);
+    switch (typ) {
+    case CELL_NUM:
+    case CELL_STRING:
+    case CELL_CFUNC:
+    default:
+        return expr;
+    case CELL_SYMBOL:
+        r = Lookup(expr, env);
+        if (r) {
+            r = GetTail(r);
+        } else {
+            printcstr("Undefined symbol: ");
+            PrintSymbol(expr);
+            printcstr("\n");
+        }
+        return r;
+    }
+}
+
+BuiltinFunction cdefs[] = {
+    { "cons", "ccc", (GenericFunc)Cons },
+    { NULL, NULL, NULL }
+};
+
 static void
 Init(void)
 {
+    BuiltinFunction *f;
+    Cell *name, *val;
     globalEnv = NULL;
     globalTrue = CString("#t");
     globalEnv = Define(globalTrue, globalTrue, globalEnv);
+    for (f = cdefs; f->name; f++) {
+        name = CSymbol(f->name);
+        val = NewCFunc(name, f);
+        globalEnv = Define(name, val, globalEnv);
+    }
 }
 
 int
@@ -391,10 +462,14 @@ main(int argc, char **argv)
     printf("-2=-2: "); Print(Match(CNum(-2), CNum(-2))); printf("\n");
 
     for(;;) {
+        Cell *x;
         printf("interactive> "); fflush(stdout);
         ptr = buf;
         fgets(buf, sizeof(buf), stdin);
-        Print(ReadItemFromString(&ptr));
+        x = ReadItemFromString(&ptr);
+        x = Eval(x, globalEnv);
+        Print(x);
+        printf("\n");
     }
     return 0;
 }

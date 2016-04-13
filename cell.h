@@ -55,7 +55,10 @@ static inline void SetUsed(Cell *ptr, int x) {
         *ptr &= ~(Num)0x8;
     }
 }
-
+static inline void SetType(Cell *ptr, int x) {
+    *ptr &= ~0x7;
+    *ptr |= x & 7;
+}
 static inline Num GetNum(Cell *ptr) {
     return (Num)(*ptr)>>4;
 }
@@ -77,6 +80,7 @@ enum CellType {
     CELL_FUNC = 4,   // a lambda expression
 
     CELL_REF = 5,    // a variable reference: head is var name, tail is value
+    CELL_SYMBOL = 6, // like a string, but will be dereferenced
 };
 
 static inline Cell CellNum(Num val) {
