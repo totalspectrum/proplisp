@@ -3,10 +3,12 @@
 #include <ctype.h>
 #include "lisp.h"
 
-static Cell *globalEnv;
-static Cell *globalTrue;
-static Cell *globalQuote;
-
+/* our context */
+static struct LispContext {
+    Cell *globalEnv;
+    Cell *globalTrue;
+    Cell *globalQuote;
+} theContext, *lc;
 
 Cell *Alloc() {
     return (Cell *)malloc(sizeof(Cell));
@@ -61,7 +63,7 @@ Cell *IsNumber(Cell *expr) {
     return NULL;
 }
 
-Cell *NewCFunc(Cell *name, BuiltinFunction *f) {
+Cell *NewCFunc(Cell *name, LispCFunction *f) {
     return RawPair(CELL_CFUNC, FromPtr(name), FromPtr(f));
 }
 void printchar(int c) {
@@ -200,34 +202,32 @@ static void PrintSymbol(Cell *str) {
 // always returns NULL
 //
 
-Cell *Print(Cell *); // forward declaration
-
-Cell *PrintList(Cell *str) {
+static Cell *PrintList(Cell *str) {
     while (str) {
-        Print(GetHead(str));
+        Lisp_Print(GetHead(str));
         str = GetTail(str);
         if (str) {
             printchar(' ');
         }
     }
-    return globalTrue;
+    return lc->globalTrue;
 }
 
-Cell *Print(Cell *str) {
+Cell *Lisp_Print(Cell *str) {
     int typ;
 
 //    printcstr("[");
     typ = GetType(str);
     switch (typ) {
     case CELL_NUM:
-        Print(NumToString(str));
+        Lisp_Print(NumToString(str));
         break;
     case CELL_STRING:
     case CELL_SYMBOL:
         PrintSymbol(str);
         break;
     case CELL_REF:
-        Print(GetHead(str));
+        Lisp_Print(GetHead(str));
         break;
     case CELL_CFUNC:
         PrintSymbol(GetHead(str));
@@ -241,7 +241,7 @@ Cell *Print(Cell *str) {
         printchar(')');
     }
 //    printcstr("]");
-    return globalTrue;
+    return lc->globalTrue;
 }
 
 static Cell *undefSymbol(Cell *name)
@@ -342,11 +342,11 @@ static Cell *doMatch(Cell *a, Cell *b, Cell *trueval, Cell *falseval)
 
 Cell *Match(Cell *a, Cell *b)
 {
-    return doMatch(a, b, globalTrue, NULL);
+    return doMatch(a, b, lc->globalTrue, NULL);
 }
 Cell *NoMatch(Cell *a, Cell *b)
 {
-    return doMatch(a, b, NULL, globalTrue);
+    return doMatch(a, b, NULL, lc->globalTrue);
 }
 // find a symbol ref
 Cell *Lookup(Cell *name, Cell *env)
@@ -424,7 +424,7 @@ Cell *ReadItemFromString(const char **str_p)
     if (c == '\'') {
         // quoted item
         result = ReadItemFromString(str_p);
-        return Cons(globalQuote, Cons(result, NULL));
+        return Cons(lc->globalQuote, Cons(result, NULL));
     }
     if (c == '-' && isdigit(*str)) {
         result = AddCharToString(result, c);
@@ -514,7 +514,7 @@ static Cell *argMismatch()
 }
 static Cell *applyCfunc(Cell *fn, Cell *args, Cell *env)
 {
-    BuiltinFunction *B;
+    LispCFunction *B;
     Cell *argv[MAX_C_ARGS];
     Cell *r;
     const char *argstr;
@@ -522,7 +522,7 @@ static Cell *applyCfunc(Cell *fn, Cell *args, Cell *env)
     int c;
     int i = 0;
         
-    if (fn == globalQuote) {
+    if (fn == lc->globalQuote) {
         return args ? GetHead(args) : NULL;
     }
     B = GetTail(fn);
@@ -568,7 +568,7 @@ static Cell *applyCfunc(Cell *fn, Cell *args, Cell *env)
 static Cell *DefineOneArg(Cell *name, Cell *val, Cell *newenv, Cell *origenv)
 {
     // special case: 'X means X gets the arg unevaluated
-    if (Head(name) == globalQuote) {
+    if (Head(name) == lc->globalQuote) {
         name = Head(Tail(name));
     } else {
         val = Eval(val, origenv);
@@ -588,7 +588,7 @@ static Cell *DefineArgs(Cell *names, Cell *args, Cell *newenv, Cell *origenv)
     if (names || args) {
         return argMismatch();
     }
-    return globalTrue;
+    return lc->globalTrue;
 }
 
 static Cell *applyLambda(Cell *fn, Cell *args, Cell *env)
@@ -604,7 +604,7 @@ static Cell *applyLambda(Cell *fn, Cell *args, Cell *env)
 
     // now define arguments if we need to
     if (IsPair(argdescrip)) {
-        if (Head(argdescrip) == globalQuote) {
+        if (Head(argdescrip) == lc->globalQuote) {
             // this one argument gets the whole list, unevaluated
             argdescrip = Tail(argdescrip);
             Define(Head(argdescrip), args, newenv);
@@ -705,7 +705,7 @@ int Minus(int x, int y) { return x-y; }
 int Times(int x, int y) { return x*y; }
 int Div(int x, int y) { return x/y; }
 
-BuiltinFunction cdefs[] = {
+LispCFunction cdefs[] = {
     // quote must come first
     { "quote", "ccc", (GenericFunc)Quote },
 
@@ -734,35 +734,66 @@ BuiltinFunction cdefs[] = {
     { NULL, NULL, NULL }
 };
 
-static Cell *defCFunc(BuiltinFunction *f)
+Cell *Lisp_DefineCFunc(LispCFunction *f)
 {
     Cell *name, *val;
     name = CSymbol(f->name);
     val = NewCFunc(name, f);
-    Define(name, val, globalEnv);
+    Define(name, val, lc->globalEnv);
     return val;
 }
 
-static void
-Init(void)
+Cell *
+Lisp_Init(void *arena, size_t arenasize)
 {
-    BuiltinFunction *f;
-    globalEnv = Cons(NULL, NULL);
-    globalTrue = CString("#t");
-    Define(globalTrue, globalTrue, globalEnv);
+    LispCFunction *f;
+
+    lc = &theContext;
+    
+    lc->globalEnv = Cons(NULL, NULL);
+    lc->globalTrue = CString("#t");
+    Define(lc->globalTrue, lc->globalTrue, lc->globalEnv);
+    Define(CSymbol("nl"), CString("\n"), lc->globalEnv);
     f = cdefs;
-    globalQuote = defCFunc(f);
+    lc->globalQuote = Lisp_DefineCFunc(f);
     f++;
     for (; f->name; f++) {
-        defCFunc(f);
+        if (!Lisp_DefineCFunc(f)) {
+            return NULL;
+        }
     }
+    return lc->globalEnv;
 }
 
+#ifndef SMALL
+// useful for calling from gdb, so only for debugging
 void debug(Cell *x) {
-    Print(x);
+    Lisp_Print(x);
     printf("\n");
 }
+#endif
 
+//
+// run a lisp script
+// (series of lisp expressions
+//
+
+Cell *Lisp_Eval(Cell *x) {
+    return Eval(x, lc->globalEnv);
+}
+
+Cell *Lisp_Run(const char *buffer)
+{
+    Cell *r = NULL;
+
+    while (*buffer) {
+        r = ReadItemFromString(&buffer);
+        r = Eval(r, lc->globalEnv);
+    }
+    return r;
+}
+
+#ifdef TEST
 int
 main(int argc, char **argv)
 {
@@ -790,8 +821,8 @@ main(int argc, char **argv)
         Print(CString("hello, world!\n"));
 
         printf("check for matches\n");
-        printf("7=17: "); Print(Match(CNum(7), CNum(17))); printf("\n");
-        printf("-2=-2: "); Print(Match(CNum(-2), CNum(-2))); printf("\n");
+        printf("7=17: "); Lisp_Print(Match(CNum(7), CNum(17))); printf("\n");
+        printf("-2=-2: "); Lisp_Print(Match(CNum(-2), CNum(-2))); printf("\n");
     }
 #endif
     
@@ -801,9 +832,10 @@ main(int argc, char **argv)
         ptr = buf;
         fgets(buf, sizeof(buf), stdin);
         x = ReadItemFromString(&ptr);
-        x = Eval(x, globalEnv);
-        Print(x);
+        x = Eval(x, lc->globalEnv);
+        Lisp_Print(x);
         printf("\n");
     }
     return 0;
 }
+#endif

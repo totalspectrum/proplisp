@@ -23,6 +23,27 @@ typedef struct {
     const char *name;
     const char *args;
     GenericFunc func;
-} BuiltinFunction;
+} LispCFunction;
+
+//
+// external interface
+//
+// define a new function
+Cell *Lisp_DefineCFunc(LispCFunction *f);
+
+// evaluate in a global environment
+Cell *Lisp_Eval(Cell *x);
+
+// print an expression
+Cell *Lisp_Print(Cell *expr);
+
+// run a string script
+// returns last expression in script
+Cell *Lisp_Run(const char *buffer);
+
+// initialize everything
+// returns a pointer to the global environment
+// or NULL on failure
+Cell *Lisp_Init(void *arena, size_t arenasize);
 
 #endif
