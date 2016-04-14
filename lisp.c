@@ -237,9 +237,7 @@ Cell *Print(Cell *str) {
         Print(GetHead(str));
         break;
     case CELL_CFUNC:
-        printcstr("#<builtin: ");
         PrintSymbol(GetHead(str));
-        printcstr(">");
         break;
     case CELL_FUNC:
         printcstr("#<lambda>");
@@ -409,17 +407,21 @@ Cell *ReadItemFromString(const char **str_p)
     do {
         c = *str++;
     } while (isspace(c));
+    *str_p = str;
     // collect the next token
     if (startoflist(c)) {
-        *str_p = str;
         return ReadListFromString(str_p);
-    }
-    if (c == '"') {
-        *str_p = str;
-        return ReadQuotedString(str_p);
     }
     if (endoflist(c)) {
         return NULL;
+    }
+    if (c == '"') {
+        return ReadQuotedString(str_p);
+    }
+    if (c == '\'') {
+        // quoted item
+        result = ReadItemFromString(str_p);
+        return Cons(globalQuote, Cons(result, NULL));
     }
     if (c == '-' && isdigit(*str)) {
         result = AddCharToString(result, c);
@@ -493,7 +495,7 @@ Cell *EvalList(Cell *list, Cell *env)
 {
     Cell *head, *tail;
     if (IsPair(list)) {
-        head = EvalList(Head(list), env);
+        head = Eval(Head(list), env);
         tail = EvalList(Tail(list), env);
         return Cons(head, tail);
     }
@@ -564,7 +566,7 @@ static Cell DefineOneArg(Cell *name, Cell *val, Cell *newenv, Cell *origenv)
     if (Head(name) == globalQuote) {
         name = Tail(name);
     } else {
-        val = EvalList(val, origenv);
+        val = Eval(val, origenv);
     }
     Define(name, val, newenv);
 }
@@ -601,7 +603,7 @@ static Cell *applyLambda(Cell *fn, Cell *args, Cell *env)
             return NULL;
         }
     } else {
-        // this argument gets the whole list, evaluated
+        // this argument gets the whole list
         DefineOneArg(argdescrip, args, newenv, env);
     }
     return Eval(body, newenv);
