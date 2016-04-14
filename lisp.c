@@ -29,11 +29,21 @@ Cell *Alloc() {
     return (Cell *)malloc(sizeof(Cell));
 }
 
-Cell *NewPair(int typ, uint32_t head, uint32_t tail)
+Cell *RawPair(int typ, uint32_t head, uint32_t tail)
 {
     Cell *x = Alloc();
     *x = CellPair(typ, head, tail);
     return x;
+}
+Cell *NewPair(int typ, Cell *head, Cell *tail)
+{
+    return RawPair(typ, FromPtr(head), FromPtr(tail));
+}
+
+// cons two cells
+Cell *Cons(Cell *head, Cell *tail)
+{
+    return NewPair(CELL_PAIR, head, tail);
 }
 
 Cell *IsPair(Cell *expr)
@@ -69,9 +79,7 @@ Cell *IsNumber(Cell *expr) {
 }
 
 Cell *NewCFunc(Cell *name, BuiltinFunction *f) {
-    Cell *x = Alloc();
-    *x = CellPair(CELL_CFUNC, FromPtr(name), FromPtr(f));
-    return x;
+    return RawPair(CELL_CFUNC, FromPtr(name), FromPtr(f));
 }
 void printchar(int c) {
     putchar(c);
@@ -97,7 +105,7 @@ Cell *CString(const char *str) {
         return NULL;
     }
     rest = CString(str+1);
-    x = NewPair(CELL_STRING, c, FromPtr(rest));
+    x = RawPair(CELL_STRING, c, FromPtr(rest));
     return x;
 }
 
@@ -160,7 +168,7 @@ Cell *Append(Cell *orig, Cell *newtail)
 Cell *AddCharToString(Cell *str, int c)
 {
     Cell *onedigit;
-    onedigit = NewPair(CELL_STRING, c, 0);
+    onedigit = RawPair(CELL_STRING, c, 0);
     return Append(str, onedigit);
 }
 
@@ -176,7 +184,7 @@ static Cell *doNumToString(UNum x, unsigned base, int prec) {
         x = x / base;
         if (c < 10) c += '0';
         else c = (c - 10) + 'A';
-        onedigit = NewPair(CELL_STRING, c, 0);
+        onedigit = RawPair(CELL_STRING, c, 0);
         result = Append(onedigit, result);
         digits++;
     }
@@ -187,7 +195,7 @@ Cell *NumToString(Cell *num) {
     Num val = GetNum(num);
     Cell *result;
     if (val < 0) {
-        result = NewPair(CELL_STRING, '-', 0);
+        result = RawPair(CELL_STRING, '-', 0);
         val = -val;
     } else {
         result = NULL;
@@ -257,12 +265,6 @@ Cell *Quote(Cell *a)
     return a;
 }
 
-// cons two cells
-Cell *Cons(Cell *head, Cell *tail)
-{
-    return NewPair(CELL_PAIR, FromPtr(head), FromPtr(tail));
-}
-
 // head of list
 Cell *Head(Cell *x)
 {
@@ -282,7 +284,7 @@ Cell *Tail(Cell *x)
 // returns the new environment
 Cell *Define(Cell *name, Cell *val, Cell *env)
 {
-    Cell *x = NewPair(CELL_REF, FromPtr(name), FromPtr(val));
+    Cell *x = NewPair(CELL_REF, name, val);
     Cell *envtail = GetTail(env);
     Cell *holder = Cons(x, envtail);
     SetTail(env, holder);
@@ -350,7 +352,7 @@ Cell *Lookup(Cell *name, Cell *env)
 {
     Cell *holder = NULL;
     Cell *hname = NULL;
-    env = GetTail(env);
+    env = Tail(env);
     while (env) {
         holder = GetHead(env);
         if (!holder) break;
@@ -436,21 +438,38 @@ Cell *ReadItemFromString(const char **str_p)
 
 Cell *ReadListFromString(const char **str_p)
 {
-    Cell *tail;
+    Cell *tail = NULL;
     Cell *x;
-    for(;;) {
-        x = ReadItemFromString(str_p);
-        if (!x) {
-            return x;
-        }
-        tail = ReadListFromString(str_p);
-        return Cons(x, tail);
+    const char *str = *str_p;
+    int c;
+    while (isspace(*str)) str++;
+    *str_p = str;
+    if (!*str) return NULL;
+    if (*str == ')') {
+        str++;
+        *str_p = str;
+        return NULL;
     }
+    x = ReadItemFromString(str_p);
+    tail = ReadListFromString(str_p);
+    return Cons(x, tail);
 }
 
-Cell *CallCFunc(Cell *args, Cell *env)
+//
+// lambda creates a function as follows:
+// ( (args, env) body )
+//
+Cell *Lambda(Cell *args, Cell *body, Cell *env)
 {
-    return NULL;
+    Cell *descrip;
+    Cell *oldenv = Tail(env);
+    Cell *newenv = Cons(NULL, oldenv);
+    Cell *r;
+
+    // fixme some sanity checking here would be nice!
+    descrip = Cons(args, newenv);
+    r = NewPair(CELL_FUNC, descrip, body);
+    return r;
 }
 
 Cell *Eval(Cell *expr, Cell *env); // forward declaration
@@ -460,7 +479,7 @@ static Cell *argMismatch()
     printcstr("argument mismatch\n");
     return NULL;
 }
-static Cell *doCfunc(Cell *fn, Cell *args, Cell *env)
+static Cell *applyCfunc(Cell *fn, Cell *args, Cell *env)
 {
     BuiltinFunction *B;
     Cell *argv[MAX_C_ARGS];
@@ -489,14 +508,15 @@ static Cell *doCfunc(Cell *fn, Cell *args, Cell *env)
             break;
         }
         argv[i] = args ? GetHead(args) : 0;
+        if (islower(c)) {
+            argv[i] = Eval(argv[i], env);
+        }
         if (c == 'n') {
             if (IsNumber(argv[i])) {
                 argv[i] = (Cell *)(intptr_t)GetNum(argv[i]);
             } else {
                 return argMismatch();
             }
-        } else if (islower(c)) {
-            argv[i] = Eval(argv[i], env);
         }
         args = args? GetTail(args) : 0;
         i++;
@@ -512,7 +532,21 @@ static Cell *doCfunc(Cell *fn, Cell *args, Cell *env)
     return r;
 }
 
-static Cell *doApply(Cell *fn, Cell *args, Cell *env)
+static Cell *applyLambda(Cell *fn, Cell *args, Cell *env)
+{
+    Cell *newenv;
+    Cell *body;
+    Cell *argdescrip;
+
+    newenv = GetHead(fn);
+    body = GetTail(fn);
+    argdescrip = GetHead(newenv);
+    newenv = GetTail(newenv);
+
+    return Eval(body, newenv);
+}
+
+Cell *Apply(Cell *fn, Cell *args, Cell *env)
 {
     int typ;
 
@@ -520,7 +554,9 @@ static Cell *doApply(Cell *fn, Cell *args, Cell *env)
     if (!fn) return NULL;
     typ = GetType(fn);
     if (typ == CELL_CFUNC) {
-        return doCfunc(fn, args, env);
+        return applyCfunc(fn, args, env);
+    } else if (typ == CELL_FUNC) {
+        return applyLambda(fn, args, env);
     } else {
         return NULL;
     }
@@ -552,7 +588,7 @@ Cell *Eval(Cell *expr, Cell *env)
     case CELL_PAIR:
         f = GetHead(expr);
         args = GetTail(expr);
-        return doApply(f, args, env);
+        return Apply(f, args, env);
     }
 }
 
@@ -564,6 +600,8 @@ int Div(int x, int y) { return x/y; }
 BuiltinFunction cdefs[] = {
     // quote must come first
     { "quote", "ccc", (GenericFunc)Quote },
+
+    { "lambda", "cCCe", (GenericFunc)Lambda },
     { "eval", "cce", (GenericFunc)Eval },
     { "define", "cCce", (GenericFunc)Define },
     { "number?", "cc", (GenericFunc)IsNumber },
@@ -594,7 +632,7 @@ Init(void)
 {
     BuiltinFunction *f;
     Cell *name, *val;
-    globalEnv = NewPair(CELL_PAIR, 0, 0);
+    globalEnv = Cons(NULL, NULL);
     globalTrue = CString("#t");
     Define(globalTrue, globalTrue, globalEnv);
     f = cdefs;
@@ -615,12 +653,12 @@ main(int argc, char **argv)
     const char *ptr;
     
     Init();
-    
+#if 0
     a = Alloc();
     b = Alloc();
     printf("a=%p b=%p\n", a, b);
 
-    t = NewPair(1, FromPtr(a), FromPtr(b));
+    t = RawPair(1, FromPtr(a), FromPtr(b));
     printf("head=%p, tail=%p\n", GetHead(t), GetTail(t));
     
     printf("numbers:\n");
@@ -634,7 +672,8 @@ main(int argc, char **argv)
     printf("check for matches\n");
     printf("7=17: "); Print(Match(CNum(7), CNum(17))); printf("\n");
     printf("-2=-2: "); Print(Match(CNum(-2), CNum(-2))); printf("\n");
-
+#endif
+    
     for(;;) {
         Cell *x;
         printf("interactive> "); fflush(stdout);
