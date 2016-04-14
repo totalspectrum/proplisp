@@ -279,14 +279,14 @@ Cell *Tail(Cell *x)
     return NULL;
 }
 
-// returns the new environment
+// returns the value defined
 Cell *Define(Cell *name, Cell *val, Cell *env)
 {
     Cell *x = NewPair(CELL_REF, name, val);
     Cell *envtail = GetTail(env);
     Cell *holder = Cons(x, envtail);
     SetTail(env, holder);
-    return x;
+    return val;
 }
 
 // check for string equality
@@ -564,7 +564,7 @@ static Cell DefineOneArg(Cell *name, Cell *val, Cell *newenv, Cell *origenv)
 {
     // special case: 'X means X gets the arg unevaluated
     if (Head(name) == globalQuote) {
-        name = Tail(name);
+        name = Head(Tail(name));
     } else {
         val = Eval(val, origenv);
     }
@@ -599,12 +599,16 @@ static Cell *applyLambda(Cell *fn, Cell *args, Cell *env)
 
     // now define arguments if we need to
     if (IsPair(argdescrip)) {
-        if (!DefineArgs(argdescrip, args, newenv, env)) {
+        if (Head(argdescrip) == globalQuote) {
+            // this one argument gets the whole list, unevaluated
+            argdescrip = Tail(argdescrip);
+            Define(Head(argdescrip), args, newenv);
+        } else if (!DefineArgs(argdescrip, args, newenv, env)) {
             return NULL;
         }
     } else {
-        // this argument gets the whole list
-        DefineOneArg(argdescrip, args, newenv, env);
+        // this argument gets the whole list, evaluated
+        Define(argdescrip, EvalList(args, env), newenv);
     }
     return Eval(body, newenv);
 }
