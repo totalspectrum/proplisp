@@ -679,12 +679,32 @@ Cell *Eval(Cell *expr, Cell *env)
     }
 }
 
+Cell *Sequence(Cell *list, Cell *env)
+{
+    Cell *expr, *r;
+    r = NULL;
+    while (list) {
+        expr = Head(list);
+        list = Tail(list);
+        r = Eval(expr, env);
+    }
+    return r;
+}
+        
 Cell *If(Cell *cond, Cell *ifpart, Cell *elsepart, Cell *env) {
     if (cond) {
         return Eval(ifpart, env);
     } else {
         return Eval(elsepart, env);
     }
+}
+
+Cell *While(Cell *cond, Cell *body, Cell *env) {
+    Cell *r = NULL;
+    while (Eval(cond, env)) {
+        r = Eval(body, env);
+    }
+    return r;
 }
 
 Cell *SetBang(Cell *name, Cell *val, Cell *env)
@@ -696,7 +716,6 @@ Cell *SetBang(Cell *name, Cell *val, Cell *env)
     SetTail(x, val);
     return val;
 }
-
 
 int Plus(int x, int y) { return x+y; }
 int Minus(int x, int y) { return x-y; }
@@ -716,7 +735,8 @@ BuiltinFunction cdefs[] = {
     { "number?", "cc", (GenericFunc)IsNumber },
     { "pair?", "cc", (GenericFunc)IsPair },
     { "eq?", "ccc", (GenericFunc)Match },
-    { "while", "cCCe", (GenericFunc)If },
+    { "begin", "cv", (GenericFunc)Sequence },
+    { "while", "cCCe", (GenericFunc)While },
     { "if", "ccCCe", (GenericFunc)If },
     { "=", "ccc", (GenericFunc)Match },
     { "<>", "ccc", (GenericFunc)NoMatch },
