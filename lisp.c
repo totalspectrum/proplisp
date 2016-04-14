@@ -216,13 +216,23 @@ static void PrintSymbol(Cell *str) {
 // print a cell
 // always returns NULL
 //
+
+Cell *Print(Cell *); // forward declaration
+
+Cell *PrintList(Cell *str) {
+    while (str) {
+        Print(GetHead(str));
+        str = GetTail(str);
+        if (str) {
+            printchar(' ');
+        }
+    }
+    return globalTrue;
+}
+
 Cell *Print(Cell *str) {
     int typ;
 
-    if (!str) {
-        printcstr("()");
-        return NULL;
-    }
 //    printcstr("[");
     typ = GetType(str);
     switch (typ) {
@@ -244,18 +254,21 @@ Cell *Print(Cell *str) {
         break;
     default:
         printchar('(');
-        while (str) {
-            Print(GetHead(str));
-            str = GetTail(str);
-            if (str) {
-                printchar(' ');
-            }
-        }
+        PrintList(str);
         printchar(')');
     }
 //    printcstr("]");
+    return globalTrue;
+}
+
+static Cell *undefSymbol(Cell *name)
+{
+    printcstr("Undefined symbol: ");
+    PrintSymbol(name);
+    printcstr("\n");
     return NULL;
 }
+
 
 // quote
 Cell *Quote(Cell *a)
@@ -322,29 +335,36 @@ stringCmp(Cell *a, Cell *b)
 // otherwise they cells must be the same
 // returns globalTrue if true, NULL if false
 
-Cell *Match(Cell *a, Cell *b)
+static Cell *doMatch(Cell *a, Cell *b, Cell *trueval, Cell *falseval)
 {
     int atag, btag;
-    Num aval, bval;
     if (a == b) {
-        return globalTrue;
+        return trueval;
     }
     atag = GetType(a);
     btag = GetType(b);
     if (atag != btag) {
-        return NULL;
+        return falseval;
     }
     switch (atag) {
     case CELL_NUM:
-        return GetNum(a) == GetNum(b) ? globalTrue : NULL;
+        return GetNum(a) == GetNum(b) ? trueval : falseval;
     case CELL_STRING:
     case CELL_SYMBOL:
-        return stringCmp(a, b) == 0 ? globalTrue : NULL;
+        return stringCmp(a, b) == 0 ? trueval : falseval;
     default:
-        return NULL;
+        return falseval;
     }
 }
 
+Cell *Match(Cell *a, Cell *b)
+{
+    return doMatch(a, b, globalTrue, NULL);
+}
+Cell *NoMatch(Cell *a, Cell *b)
+{
+    return doMatch(a, b, NULL, globalTrue);
+}
 // find a symbol ref
 Cell *Lookup(Cell *name, Cell *env)
 {
@@ -401,7 +421,6 @@ Cell *ReadItemFromString(const char **str_p)
     Cell *result = NULL;
     int c;
     const char *str = *str_p;
-    int isnum;
     int alldigits = 1;
     
     do {
@@ -413,6 +432,7 @@ Cell *ReadItemFromString(const char **str_p)
         return ReadListFromString(str_p);
     }
     if (endoflist(c)) {
+        *str_p = str - 1; // put back the delimiter
         return NULL;
     }
     if (c == '"') {
@@ -453,20 +473,22 @@ Cell *ReadListFromString(const char **str_p)
     Cell *x;
     int c;
     const char *str;
-    
+
     for(;;) {
         x = ReadItemFromString(str_p);
         if (!x) {
-            break;
+            // is there more stuff in the string?
+            str = *str_p;
+            c = *str;
+            if (c && endoflist(c)) {
+                str++;
+                *str_p = str;
+                // nope, no more stuff
+                break;
+            }
         }
         x = Cons(x, NULL);
         result = Append(result, x);
-    }
-    str = *str_p;
-    c = *str;
-    if (c && endoflist(c)) {
-        str++;
-        *str_p = str;
     }
     return result;
 }
@@ -560,7 +582,7 @@ static Cell *applyCfunc(Cell *fn, Cell *args, Cell *env)
     return r;
 }
 
-static Cell DefineOneArg(Cell *name, Cell *val, Cell *newenv, Cell *origenv)
+static Cell *DefineOneArg(Cell *name, Cell *val, Cell *newenv, Cell *origenv)
 {
     // special case: 'X means X gets the arg unevaluated
     if (Head(name) == globalQuote) {
@@ -568,7 +590,7 @@ static Cell DefineOneArg(Cell *name, Cell *val, Cell *newenv, Cell *origenv)
     } else {
         val = Eval(val, origenv);
     }
-    Define(name, val, newenv);
+    return Define(name, val, newenv);
 }
 
 static Cell *DefineArgs(Cell *names, Cell *args, Cell *newenv, Cell *origenv)
@@ -647,9 +669,7 @@ Cell *Eval(Cell *expr, Cell *env)
         if (r) {
             r = GetTail(r);
         } else {
-            printcstr("Undefined symbol: ");
-            PrintSymbol(expr);
-            printcstr("\n");
+            r = undefSymbol(expr);
         }
         return r;
     case CELL_PAIR:
@@ -658,6 +678,25 @@ Cell *Eval(Cell *expr, Cell *env)
         return Apply(f, args, env);
     }
 }
+
+Cell *If(Cell *cond, Cell *ifpart, Cell *elsepart, Cell *env) {
+    if (cond) {
+        return Eval(ifpart, env);
+    } else {
+        return Eval(elsepart, env);
+    }
+}
+
+Cell *SetBang(Cell *name, Cell *val, Cell *env)
+{
+    Cell *x = Lookup(name, env);
+    if (GetType(x) != CELL_REF) {
+        return undefSymbol(name);
+    }
+    SetTail(x, val);
+    return val;
+}
+
 
 int Plus(int x, int y) { return x+y; }
 int Minus(int x, int y) { return x-y; }
@@ -668,12 +707,19 @@ BuiltinFunction cdefs[] = {
     // quote must come first
     { "quote", "ccc", (GenericFunc)Quote },
 
+    // remember: return val, then args in the C string
     { "lambda", "cCCe", (GenericFunc)Lambda },
     { "eval", "cce", (GenericFunc)Eval },
+    { "set!", "cCce", (GenericFunc)SetBang },
+    { "print", "cv", (GenericFunc)PrintList },
     { "define", "cCce", (GenericFunc)Define },
     { "number?", "cc", (GenericFunc)IsNumber },
     { "pair?", "cc", (GenericFunc)IsPair },
     { "eq?", "ccc", (GenericFunc)Match },
+    { "while", "cCCe", (GenericFunc)If },
+    { "if", "ccCCe", (GenericFunc)If },
+    { "=", "ccc", (GenericFunc)Match },
+    { "<>", "ccc", (GenericFunc)NoMatch },
     { "append", "ccc", (GenericFunc)Append },
     { "cons", "ccc", (GenericFunc)Cons },
     { "head", "cc", (GenericFunc)Head },
@@ -698,7 +744,6 @@ static void
 Init(void)
 {
     BuiltinFunction *f;
-    Cell *name, *val;
     globalEnv = Cons(NULL, NULL);
     globalTrue = CString("#t");
     Define(globalTrue, globalTrue, globalEnv);
@@ -718,32 +763,33 @@ void debug(Cell *x) {
 int
 main(int argc, char **argv)
 {
-    int i;
-    static Cell *a, *b;
-    Cell *t;
     char buf[512];
     const char *ptr;
     
     Init();
 #if 0
-    a = Alloc();
-    b = Alloc();
-    printf("a=%p b=%p\n", a, b);
-
-    t = RawPair(1, FromPtr(a), FromPtr(b));
-    printf("head=%p, tail=%p\n", GetHead(t), GetTail(t));
+    {
+        int i;
+        static Cell *a, *b;
+        Cell *t;
+        a = Alloc();
+        b = Alloc();
+        printf("a=%p b=%p\n", a, b);
+        t = RawPair(1, FromPtr(a), FromPtr(b));
+        printf("head=%p, tail=%p\n", GetHead(t), GetTail(t));
     
-    printf("numbers:\n");
-    Print(CNum(0)); printchar('\n');
-    Print(CNum(1)); printchar('\n');
-    Print(CNum(-17)); printchar('\n');
+        printf("numbers:\n");
+        Print(CNum(0)); printchar('\n');
+        Print(CNum(1)); printchar('\n');
+        Print(CNum(-17)); printchar('\n');
 
-    printf("strings:\n");
-    Print(CString("hello, world!\n"));
+        printf("strings:\n");
+        Print(CString("hello, world!\n"));
 
-    printf("check for matches\n");
-    printf("7=17: "); Print(Match(CNum(7), CNum(17))); printf("\n");
-    printf("-2=-2: "); Print(Match(CNum(-2), CNum(-2))); printf("\n");
+        printf("check for matches\n");
+        printf("7=17: "); Print(Match(CNum(7), CNum(17))); printf("\n");
+        printf("-2=-2: "); Print(Match(CNum(-2), CNum(-2))); printf("\n");
+    }
 #endif
     
     for(;;) {

@@ -1,5 +1,5 @@
 CC=gcc -m32
-CFLAGS= -g
+CFLAGS= -g -Og -Wall
 
 lisp: lisp.c cell.h
 	$(CC) $(CFLAGS) -o lisp lisp.c

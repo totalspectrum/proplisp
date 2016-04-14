@@ -123,7 +123,6 @@ static inline Cell CellNum(Num val) {
 }
 
 static inline Cell CellPair(int typ, uint32_t head, uint32_t tail) {
-    uint32_t h, t;
     return (((Cell)head) <<HEADSHIFT) | (((Cell)tail)<<4) | (typ & 0x7);
 }
 
