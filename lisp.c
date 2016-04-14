@@ -1,29 +1,12 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <ctype.h>
-#include "cell.h"
+#include "lisp.h"
 
-//
-// C functions that interface with Lisp may have up to 4 arguments
-// we have a string to describe the return value (first item) and arguments:
-//   n is a number
-//   c is a cell that should be evaluated
-//   C is a cell to pass in unchanged (same as c for return type)
-//
+static Cell *globalEnv;
+static Cell *globalTrue;
+static Cell *globalQuote;
 
-#define MAX_C_ARGS 4
-typedef void *voidptr;
-typedef voidptr (*GenericFunc)(voidptr, voidptr, voidptr, voidptr);
-
-typedef struct {
-    const char *name;
-    const char *args;
-    GenericFunc func;
-} BuiltinFunction;
-
-Cell *globalEnv;
-Cell *globalTrue;
-Cell *globalQuote;
 
 Cell *Alloc() {
     return (Cell *)malloc(sizeof(Cell));
