@@ -388,6 +388,16 @@ Cell *ReadQuotedString(const char **str_p) {
     return result;
 }
 
+static int startoflist(int c)
+{
+    return (c == '(');
+}
+
+static int endoflist(int c)
+{
+    return (c == 0) || (c == ')');
+}
+
 Cell *ReadItemFromString(const char **str_p)
 {
     Cell *result = NULL;
@@ -400,7 +410,7 @@ Cell *ReadItemFromString(const char **str_p)
         c = *str++;
     } while (isspace(c));
     // collect the next token
-    if (c == '(') {
+    if (startoflist(c)) {
         *str_p = str;
         return ReadListFromString(str_p);
     }
@@ -408,8 +418,7 @@ Cell *ReadItemFromString(const char **str_p)
         *str_p = str;
         return ReadQuotedString(str_p);
     }
-    if (c == 0 || c == ')') {
-        *str_p = str-1;
+    if (endoflist(c)) {
         return NULL;
     }
     if (c == '-' && isdigit(*str)) {
@@ -420,9 +429,9 @@ Cell *ReadItemFromString(const char **str_p)
         result = AddCharToString(result, c);
         alldigits = alldigits && isdigit(c);
         c = *str++;
-    } while (c != 0 && !isspace(c) && c != ')');
+    } while (c != 0 && !isspace(c) && !endoflist(c));
 
-    if (c) {
+    if (!endoflist(c)) {
         // skip delimiter
         *str_p = str;
     } else {
@@ -438,21 +447,26 @@ Cell *ReadItemFromString(const char **str_p)
 
 Cell *ReadListFromString(const char **str_p)
 {
-    Cell *tail = NULL;
+    Cell *result = NULL;
     Cell *x;
-    const char *str = *str_p;
     int c;
-    while (isspace(*str)) str++;
-    *str_p = str;
-    if (!*str) return NULL;
-    if (*str == ')') {
+    const char *str;
+    
+    for(;;) {
+        x = ReadItemFromString(str_p);
+        if (!x) {
+            break;
+        }
+        x = Cons(x, NULL);
+        result = Append(result, x);
+    }
+    str = *str_p;
+    c = *str;
+    if (c && endoflist(c)) {
         str++;
         *str_p = str;
-        return NULL;
     }
-    x = ReadItemFromString(str_p);
-    tail = ReadListFromString(str_p);
-    return Cons(x, tail);
+    return result;
 }
 
 //
@@ -474,6 +488,18 @@ Cell *Lambda(Cell *args, Cell *body, Cell *env)
 
 Cell *Eval(Cell *expr, Cell *env); // forward declaration
 
+// evaluate each member of a list
+Cell *EvalList(Cell *list, Cell *env)
+{
+    Cell *head, *tail;
+    if (IsPair(list)) {
+        head = EvalList(Head(list), env);
+        tail = EvalList(Tail(list), env);
+        return Cons(head, tail);
+    }
+    return Eval(list, env);
+}
+
 static Cell *argMismatch()
 {
     printcstr("argument mismatch\n");
@@ -490,7 +516,7 @@ static Cell *applyCfunc(Cell *fn, Cell *args, Cell *env)
     int i = 0;
         
     if (fn == globalQuote) {
-        return GetHead(args);
+        return args ? GetHead(args) : NULL;
     }
     B = GetTail(fn);
     argstr = B->args;
@@ -503,7 +529,7 @@ static Cell *applyCfunc(Cell *fn, Cell *args, Cell *env)
             continue;
         }
         if (c == 'v') {
-            argv[i++] = args;
+            argv[i++] = EvalList(args, env);
             args = NULL;
             break;
         }
@@ -532,6 +558,32 @@ static Cell *applyCfunc(Cell *fn, Cell *args, Cell *env)
     return r;
 }
 
+static Cell DefineOneArg(Cell *name, Cell *val, Cell *newenv, Cell *origenv)
+{
+    // special case: 'X means X gets the arg unevaluated
+    if (Head(name) == globalQuote) {
+        name = Tail(name);
+    } else {
+        val = EvalList(val, origenv);
+    }
+    Define(name, val, newenv);
+}
+
+static Cell *DefineArgs(Cell *names, Cell *args, Cell *newenv, Cell *origenv)
+{
+    Cell *name, *val;
+
+    while (names && args) {
+        name = Head(names); names = Tail(names);
+        val = Head(args);  args = Tail(args);
+        DefineOneArg(name, val, newenv, origenv);
+    }
+    if (names || args) {
+        return argMismatch();
+    }
+    return globalTrue;
+}
+
 static Cell *applyLambda(Cell *fn, Cell *args, Cell *env)
 {
     Cell *newenv;
@@ -543,6 +595,15 @@ static Cell *applyLambda(Cell *fn, Cell *args, Cell *env)
     argdescrip = GetHead(newenv);
     newenv = GetTail(newenv);
 
+    // now define arguments if we need to
+    if (IsPair(argdescrip)) {
+        if (!DefineArgs(argdescrip, args, newenv, env)) {
+            return NULL;
+        }
+    } else {
+        // this argument gets the whole list, evaluated
+        DefineOneArg(argdescrip, args, newenv, env);
+    }
     return Eval(body, newenv);
 }
 
@@ -641,6 +702,11 @@ Init(void)
     for (; f->name; f++) {
         defCFunc(f);
     }
+}
+
+void debug(Cell *x) {
+    Print(x);
+    printf("\n");
 }
 
 int
