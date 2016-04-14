@@ -700,10 +700,26 @@ Cell *SetBang(Cell *name, Cell *val, Cell *env)
     return val;
 }
 
+// this is like define, but allows recursion
+Cell *DefineFunc(Cell *name, Cell *args, Cell *body, Cell *env)
+{
+    Cell *f;
+    Define(name, CNum(0), env);
+    f = Lambda(args, body, env);
+    SetBang(name, f, env);
+    return f;
+}
+
+
 int Plus(int x, int y) { return x+y; }
 int Minus(int x, int y) { return x-y; }
 int Times(int x, int y) { return x*y; }
 int Div(int x, int y) { return x/y; }
+
+Cell *Lt(int x, int y) { return (x < y) ? lc->globalTrue : NULL; }
+Cell *Le(int x, int y) { return (x <= y) ? lc->globalTrue : NULL; }
+Cell *Gt(int x, int y) { return (x > y) ? lc->globalTrue : NULL; }
+Cell *Ge(int x, int y) { return (x >= y) ? lc->globalTrue : NULL; }
 
 LispCFunction cdefs[] = {
     // quote must come first
@@ -711,6 +727,7 @@ LispCFunction cdefs[] = {
 
     // remember: return val, then args in the C string
     { "lambda", "cCCe", (GenericFunc)Lambda },
+    { "defun", "cCCCe", (GenericFunc)DefineFunc },
     { "eval", "cce", (GenericFunc)Eval },
     { "set!", "cCce", (GenericFunc)SetBang },
     { "print", "cv", (GenericFunc)PrintList },
@@ -723,6 +740,10 @@ LispCFunction cdefs[] = {
     { "if", "ccCCe", (GenericFunc)If },
     { "=", "ccc", (GenericFunc)Match },
     { "<>", "ccc", (GenericFunc)NoMatch },
+    { "<", "cnn", (GenericFunc)Lt },
+    { "<=", "cnn", (GenericFunc)Le },
+    { ">", "cnn", (GenericFunc)Gt },
+    { ">=", "cnn", (GenericFunc)Ge },
     { "append", "ccc", (GenericFunc)Append },
     { "cons", "ccc", (GenericFunc)Cons },
     { "head", "cc", (GenericFunc)Head },
