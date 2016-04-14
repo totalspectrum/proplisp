@@ -6,7 +6,7 @@
 //
 // C functions that interface with Lisp may have up to 4 arguments
 // we have a string to describe the return value (first item) and arguments:
-//   i is a number
+//   n is a number
 //   c is a cell that should be evaluated
 //   C is a cell to pass in unchanged (same as c for return type)
 //
@@ -39,9 +39,6 @@ Cell *NewPair(int typ, uint32_t head, uint32_t tail)
 Cell *IsPair(Cell *expr)
 {
     int typ;
-    if (!expr) {
-        return NULL;
-    }
     typ = GetType(expr);
     switch (typ) {
     case CELL_PAIR:
@@ -55,9 +52,6 @@ Cell *IsPair(Cell *expr)
 Cell *IsString(Cell *expr)
 {
     int typ;
-    if (!expr) {
-        return NULL;
-    }
     typ = GetType(expr);
     switch (typ) {
     case CELL_SYMBOL:
@@ -66,6 +60,12 @@ Cell *IsString(Cell *expr)
     default:
         return NULL;
     }
+}
+
+Cell *IsNumber(Cell *expr) {
+    int typ = GetType(expr);
+    if (typ == CELL_NUM) return expr;
+    return NULL;
 }
 
 Cell *NewCFunc(Cell *name, BuiltinFunction *f) {
@@ -455,7 +455,64 @@ Cell *CallCFunc(Cell *args, Cell *env)
 
 Cell *Eval(Cell *expr, Cell *env); // forward declaration
 
-Cell *doApply(Cell *fn, Cell *args, Cell *env)
+static Cell *argMismatch()
+{
+    printcstr("argument mismatch\n");
+    return NULL;
+}
+static Cell *doCfunc(Cell *fn, Cell *args, Cell *env)
+{
+    BuiltinFunction *B;
+    Cell *argv[MAX_C_ARGS];
+    Cell *r;
+    const char *argstr;
+    int rettype;
+    int c;
+    int i = 0;
+        
+    if (fn == globalQuote) {
+        return GetHead(args);
+    }
+    B = GetTail(fn);
+    argstr = B->args;
+    rettype = *argstr++;
+    // now extract arguments
+    i = 0;
+    while ( 0 != (c = *argstr++) && i < MAX_C_ARGS) {
+        if (c == 'e') {
+            argv[i++] = env;
+            continue;
+        }
+        if (c == 'v') {
+            argv[i++] = args;
+            args = NULL;
+            break;
+        }
+        argv[i] = args ? GetHead(args) : 0;
+        if (c == 'n') {
+            if (IsNumber(argv[i])) {
+                argv[i] = (Cell *)(intptr_t)GetNum(argv[i]);
+            } else {
+                return argMismatch();
+            }
+        } else if (islower(c)) {
+            argv[i] = Eval(argv[i], env);
+        }
+        args = args? GetTail(args) : 0;
+        i++;
+    }
+    /* are all arguments accounted for? */
+    if (args) {
+        return argMismatch();
+    }
+    r = (*B->func)(argv[0], argv[1], argv[2], argv[3]);
+    if (rettype == 'n') {
+        r = CNum((intptr_t)r);
+    }
+    return r;
+}
+
+static Cell *doApply(Cell *fn, Cell *args, Cell *env)
 {
     int typ;
 
@@ -463,40 +520,7 @@ Cell *doApply(Cell *fn, Cell *args, Cell *env)
     if (!fn) return NULL;
     typ = GetType(fn);
     if (typ == CELL_CFUNC) {
-        BuiltinFunction *B;
-        Cell *argv[MAX_C_ARGS];
-        Cell *r;
-        const char *argstr;
-        int rettype;
-        int c;
-        int i = 0;
-        
-        if (fn == globalQuote) {
-            return GetHead(args);
-        }
-        B = GetTail(fn);
-        argstr = B->args;
-        rettype = *argstr++;
-        // now extract arguments
-        i = 0;
-        while ( 0 != (c = *argstr++) && i < MAX_C_ARGS) {
-            if (c == 'e') {
-                argv[i++] = env;
-                continue;
-            }
-            if (c == 'v') {
-                argv[i++] = args;
-                break;
-            }
-            argv[i] = args ? GetHead(args) : 0;
-            if (islower(c)) {
-                argv[i] = Eval(argv[i], env);
-            }
-            args = args? GetTail(args) : 0;
-            i++;
-        }
-        r = (*B->func)(argv[0], argv[1], argv[2], argv[3]);
-        return r;
+        return doCfunc(fn, args, env);
     } else {
         return NULL;
     }
@@ -508,7 +532,6 @@ Cell *Eval(Cell *expr, Cell *env)
     Cell *r;
     Cell *f, *args;
     
-    if (!expr) return expr;
     typ = GetType(expr);
     switch (typ) {
     case CELL_NUM:
@@ -533,14 +556,27 @@ Cell *Eval(Cell *expr, Cell *env)
     }
 }
 
+int Plus(int x, int y) { return x+y; }
+int Minus(int x, int y) { return x-y; }
+int Times(int x, int y) { return x*y; }
+int Div(int x, int y) { return x/y; }
+
 BuiltinFunction cdefs[] = {
     // quote must come first
     { "quote", "ccc", (GenericFunc)Quote },
-    { "cons", "ccc", (GenericFunc)Cons },
+    { "eval", "cce", (GenericFunc)Eval },
     { "define", "cCce", (GenericFunc)Define },
+    { "number?", "cc", (GenericFunc)IsNumber },
+    { "pair?", "cc", (GenericFunc)IsPair },
+    { "eq?", "ccc", (GenericFunc)Match },
+    { "append", "ccc", (GenericFunc)Append },
+    { "cons", "ccc", (GenericFunc)Cons },
     { "head", "cc", (GenericFunc)Head },
     { "tail", "cc", (GenericFunc)Tail },
-    { "eval", "cce", (GenericFunc)Eval },
+    { "/", "nnn", (GenericFunc)Div },
+    { "*", "nnn", (GenericFunc)Times },
+    { "-", "nnn", (GenericFunc)Minus },
+    { "+", "nnn", (GenericFunc)Plus },
     { NULL, NULL, NULL }
 };
 
