@@ -7,9 +7,13 @@
 // C functions that interface with Lisp may have up to 4 arguments
 // we have a string to describe the return value (first item) and arguments:
 //   i is a number
-//   c is a cell
+//   c is a cell that should be evaluated
+//   C is a cell to pass in unchanged (same as c for return type)
 //
-typedef intptr_t (*GenericFunc)(intptr_t, intptr_t, intptr_t, intptr_t);
+
+#define MAX_C_ARGS 4
+typedef void *voidptr;
+typedef voidptr (*GenericFunc)(voidptr, voidptr, voidptr, voidptr);
 
 typedef struct {
     const char *name;
@@ -30,6 +34,38 @@ Cell *NewPair(int typ, uint32_t head, uint32_t tail)
     Cell *x = Alloc();
     *x = CellPair(typ, head, tail);
     return x;
+}
+
+Cell *IsPair(Cell *expr)
+{
+    int typ;
+    if (!expr) {
+        return NULL;
+    }
+    typ = GetType(expr);
+    switch (typ) {
+    case CELL_PAIR:
+    case CELL_REF:
+        return expr;
+    default:
+        return NULL;
+    }
+}
+
+Cell *IsString(Cell *expr)
+{
+    int typ;
+    if (!expr) {
+        return NULL;
+    }
+    typ = GetType(expr);
+    switch (typ) {
+    case CELL_SYMBOL:
+    case CELL_STRING:
+        return expr;
+    default:
+        return NULL;
+    }
 }
 
 Cell *NewCFunc(Cell *name, BuiltinFunction *f) {
@@ -227,12 +263,30 @@ Cell *Cons(Cell *head, Cell *tail)
     return NewPair(CELL_PAIR, FromPtr(head), FromPtr(tail));
 }
 
+// head of list
+Cell *Head(Cell *x)
+{
+    if (IsPair(x)) {
+        return GetHead(x);
+    }
+    return NULL;
+}
+Cell *Tail(Cell *x)
+{
+    if (IsPair(x) || IsString(x)) {
+        return GetTail(x);
+    }
+    return NULL;
+}
+
 // returns the new environment
 Cell *Define(Cell *name, Cell *val, Cell *env)
 {
     Cell *x = NewPair(CELL_REF, FromPtr(name), FromPtr(val));
-    Cell *holder = Cons(x, env);
-    return holder;
+    Cell *envtail = GetTail(env);
+    Cell *holder = Cons(x, envtail);
+    SetTail(env, holder);
+    return x;
 }
 
 // check for string equality
@@ -296,8 +350,10 @@ Cell *Lookup(Cell *name, Cell *env)
 {
     Cell *holder = NULL;
     Cell *hname = NULL;
+    env = GetTail(env);
     while (env) {
         holder = GetHead(env);
+        if (!holder) break;
         hname = GetHead(holder);
         if (Match(hname, name)) {
             return holder;
@@ -407,10 +463,40 @@ Cell *doApply(Cell *fn, Cell *args, Cell *env)
     if (!fn) return NULL;
     typ = GetType(fn);
     if (typ == CELL_CFUNC) {
+        BuiltinFunction *B;
+        Cell *argv[MAX_C_ARGS];
+        Cell *r;
+        const char *argstr;
+        int rettype;
+        int c;
+        int i = 0;
+        
         if (fn == globalQuote) {
-            return args ? GetHead(args) : NULL;
+            return GetHead(args);
         }
-        return globalTrue;
+        B = GetTail(fn);
+        argstr = B->args;
+        rettype = *argstr++;
+        // now extract arguments
+        i = 0;
+        while ( 0 != (c = *argstr++) && i < MAX_C_ARGS) {
+            if (c == 'e') {
+                argv[i++] = env;
+                continue;
+            }
+            if (c == 'v') {
+                argv[i++] = args;
+                break;
+            }
+            argv[i] = args ? GetHead(args) : 0;
+            if (islower(c)) {
+                argv[i] = Eval(argv[i], env);
+            }
+            args = args? GetTail(args) : 0;
+            i++;
+        }
+        r = (*B->func)(argv[0], argv[1], argv[2], argv[3]);
+        return r;
     } else {
         return NULL;
     }
@@ -451,6 +537,10 @@ BuiltinFunction cdefs[] = {
     // quote must come first
     { "quote", "ccc", (GenericFunc)Quote },
     { "cons", "ccc", (GenericFunc)Cons },
+    { "define", "cCce", (GenericFunc)Define },
+    { "head", "cc", (GenericFunc)Head },
+    { "tail", "cc", (GenericFunc)Tail },
+    { "eval", "cce", (GenericFunc)Eval },
     { NULL, NULL, NULL }
 };
 
@@ -459,7 +549,7 @@ static Cell *defCFunc(BuiltinFunction *f)
     Cell *name, *val;
     name = CSymbol(f->name);
     val = NewCFunc(name, f);
-    globalEnv = Define(name, val, globalEnv);
+    Define(name, val, globalEnv);
     return val;
 }
 
@@ -468,9 +558,9 @@ Init(void)
 {
     BuiltinFunction *f;
     Cell *name, *val;
-    globalEnv = NULL;
+    globalEnv = NewPair(CELL_PAIR, 0, 0);
     globalTrue = CString("#t");
-    globalEnv = Define(globalTrue, globalTrue, globalEnv);
+    Define(globalTrue, globalTrue, globalEnv);
     f = cdefs;
     globalQuote = defCFunc(f);
     f++;

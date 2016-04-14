@@ -101,7 +101,7 @@ static void SetTail(Cell *ptr, Cell *val) {
 
 enum CellType {
     CELL_NUM = 0,
-    CELL_CFUNC = 1,  // tail is ptr to C function, head 
+    CELL_CFUNC = 1,  // tail is ptr to C function, head is ???
     CELL_STRING = 2, // head is first char, tail points to rest of string
     CELL_PAIR = 3,   // basic building block for lists and such
     CELL_FUNC = 4,   // a lambda expression
