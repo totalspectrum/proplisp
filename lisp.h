@@ -25,6 +25,12 @@ typedef struct {
     GenericFunc func;
 } LispCFunction;
 
+// external functions defined by the app
+extern void outchar(int c);
+
+// defined by us 
+void printcstr(const char *s);
+
 //
 // external interface
 //

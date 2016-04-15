@@ -116,6 +116,13 @@ static INLINE void SetTail(Cell *ptr, Cell *val) {
     r |= v<<4;
     *ptr = r;
 }
+static INLINE void SetHead(Cell *ptr, Cell *val) {
+    Cell r = *ptr;
+    uint32_t v = FromPtr(val);
+    r &= ~ ((Cell)PTRMASK<<HEADSHIFT);
+    r |= (Cell)v<<HEADSHIFT;
+    *ptr = r;
+}
 
 static INLINE Cell CellNum(Num val) {
     return (val << 4) | CELL_NUM;

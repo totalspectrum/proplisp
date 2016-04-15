@@ -1,7 +1,10 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <ctype.h>
 #include "lisp.h"
+
+#define PENDING_ALLOCS 16
 
 /* our context */
 static struct LispContext {
@@ -10,12 +13,22 @@ static struct LispContext {
     Cell *globalQuote; // the quote function
 
     Cell *freeList;   // list of free nodes
-    Cell *protectEnv; // anything pointed to by this will not be reclaimed in GC
-
+    // we also keep a circular buffer of MAX_ALLOC allocations that will
+    // not be reclaimed by garbage collection
+    Cell *pendingAlloc[PENDING_ALLOCS];
+    int   paptr;
+    
     Cell *base;        // base of memory
     size_t totalCells; // number of cells in memory
     size_t freeCells;  // number of free cells
 } *lc;
+
+static void GC_PROTECT(Cell *x) {
+    if (!x) return;
+    lc->pendingAlloc[lc->paptr++] = x;
+    if (lc->paptr == PENDING_ALLOCS)
+        lc->paptr = 0;
+}
 
 // mark all cells free, pending sweep for used cells
 static void MarkFree(void) {
@@ -54,36 +67,80 @@ static void CollectFree(void) {
 static void InitGC(void *base, size_t size) {
     lc->base = base;
     lc->totalCells = size / sizeof(Cell);
-    lc->protectEnv = 0;
     MarkFree();
     CollectFree();
 }
 
-Cell *Alloc() {
-    Cell *r = lc->freeList;
-    if (r) {
-        lc->freeCells--;
-        lc->freeList = GetTail(r);
-        return r;
+static void doMarkUsed(Cell *ptr) {
+    int typ;
+    if (!ptr) return;
+    SetUsed(ptr);
+    typ = GetType(ptr);
+    switch (typ) {
+    case CELL_REF:
+    case CELL_PAIR:
+    case CELL_FUNC:
+        doMarkUsed(GetHead(ptr));
+        /* fall through */
+    case CELL_STRING:
+    case CELL_SYMBOL:
+        doMarkUsed(GetTail(ptr));
+    default:
+        break;
     }
-    return NULL;
 }
 
-Cell *RawPair(int typ, uint32_t head, uint32_t tail)
+static void doGC() {
+    int i;
+    MarkFree();
+    doMarkUsed(lc->globalEnv);
+    for (i = 0; i < PENDING_ALLOCS; i++) {
+        doMarkUsed(lc->pendingAlloc[i]);
+    }
+    CollectFree();
+}
+
+// allocate 1 cell
+
+Cell *GCAlloc(void) {
+    Cell *r;
+#if 0
+    
+    r = lc->freeList;
+    if (!r) {
+        doGC();
+        r = lc->freeList;
+    }
+    if (!r) {
+        printcstr("out of memory!\n");
+    } else {
+        lc->freeCells--;
+        lc->freeList = GetTail(r);
+    }
+#else
+    r = malloc(sizeof(*r));
+#endif
+    return r;
+}
+
+Cell *AllocRawPair(int typ, uint32_t head, uint32_t tail)
 {
-    Cell *x = Alloc();
+    Cell *x = GCAlloc();
     *x = CellPair(typ, head, tail);
     return x;
 }
-Cell *NewPair(int typ, Cell *head, Cell *tail)
+Cell *AllocPair(int typ, Cell *head, Cell *tail)
 {
-    return RawPair(typ, FromPtr(head), FromPtr(tail));
+    return AllocRawPair(typ, FromPtr(head), FromPtr(tail));
 }
 
 // cons two cells
 Cell *Cons(Cell *head, Cell *tail)
 {
-    return NewPair(CELL_PAIR, head, tail);
+    Cell *r;
+    r = AllocPair(CELL_PAIR, head, tail);
+    GC_PROTECT(r);
+    return r;
 }
 
 Cell *IsPair(Cell *expr)
@@ -119,11 +176,9 @@ Cell *IsNumber(Cell *expr) {
 }
 
 Cell *NewCFunc(Cell *name, LispCFunction *f) {
-    return RawPair(CELL_CFUNC, FromPtr(name), FromPtr(f));
+    return AllocRawPair(CELL_CFUNC, FromPtr(name), FromPtr(f));
 }
-void printchar(int c) {
-    putchar(c);
-}
+#define printchar(c) outchar(c)
 
 void printcstr(const char *s) {
     int c;
@@ -137,16 +192,34 @@ int readchar() {
 }
 
 Cell *CString(const char *str) {
+#if 1
     Cell *x;
     Cell *rest;
+#else
+    Cell *head;
+    Cell *last;
+    Cell *next;
+#endif
     int c;
     
     if (!str || (0 == (c = *str)) ) {
         return NULL;
     }
+#if 1
     rest = CString(str+1);
-    x = RawPair(CELL_STRING, c, FromPtr(rest));
+    x = AllocRawPair(CELL_STRING, c, FromPtr(rest));
     return x;
+#else
+    c = *str++;
+    last = head = AllocRawPair(CELL_STRING, c, 0);
+    GC_PROTECT(head);
+    while (0 != (c = *str++)) {
+        next = AllocRawPair(CELL_STRING, c, 0);
+        SetTail(last, next);
+        last = next;
+    }
+    return head;
+#endif
 }
 
 Cell *CSymbol(const char *str) {
@@ -156,7 +229,7 @@ Cell *CSymbol(const char *str) {
 }
 
 Cell *CNum(Num val) {
-    Cell *x = Alloc();
+    Cell *x = GCAlloc();
     *x = CellNum(val);
     return x;
 }
@@ -208,7 +281,7 @@ Cell *Append(Cell *orig, Cell *newtail)
 Cell *AddCharToString(Cell *str, int c)
 {
     Cell *onedigit;
-    onedigit = RawPair(CELL_STRING, c, 0);
+    onedigit = AllocRawPair(CELL_STRING, c, 0);
     return Append(str, onedigit);
 }
 
@@ -224,7 +297,8 @@ static Cell *doNumToString(UNum x, unsigned base, int prec) {
         x = x / base;
         if (c < 10) c += '0';
         else c = (c - 10) + 'A';
-        onedigit = RawPair(CELL_STRING, c, 0);
+        onedigit = AllocRawPair(CELL_STRING, c, 0);
+        GC_PROTECT(onedigit);
         result = Append(onedigit, result);
         digits++;
     }
@@ -235,7 +309,7 @@ Cell *NumToString(Cell *num) {
     Num val = GetNum(num);
     Cell *result;
     if (val < 0) {
-        result = RawPair(CELL_STRING, '-', 0);
+        result = AllocRawPair(CELL_STRING, '-', 0);
         val = -val;
     } else {
         result = NULL;
@@ -333,9 +407,11 @@ Cell *Tail(Cell *x)
 // returns the value defined
 Cell *Define(Cell *name, Cell *val, Cell *env)
 {
-    Cell *x = NewPair(CELL_REF, name, val);
+    Cell *holder;
+    Cell *x = AllocPair(CELL_REF, name, val);
     Cell *envtail = GetTail(env);
-    Cell *holder = Cons(x, envtail);
+
+    holder = Cons(x, envtail);
     SetTail(env, holder);
     return val;
 }
@@ -424,9 +500,10 @@ Cell *Lookup(Cell *name, Cell *env)
 Cell *ReadListFromString(const char **str_p);
     
 Cell *ReadQuotedString(const char **str_p) {
-    Cell *result = NULL;
+    Cell *result = AllocPair(CELL_PAIR, 0, 0);
     int c;
     const char *str = *str_p;
+    GC_PROTECT(result);
     for(;;) {
         c = *str++;
         if (!c) break;
@@ -441,7 +518,7 @@ Cell *ReadQuotedString(const char **str_p) {
         result = AddCharToString(result, c);
     }
     *str_p = str;
-    return result;
+    return GetTail(result);
 }
 
 static int startoflist(int c)
@@ -551,7 +628,7 @@ Cell *Lambda(Cell *args, Cell *body, Cell *env)
 
     // fixme some sanity checking here would be nice!
     descrip = Cons(args, newenv);
-    r = NewPair(CELL_FUNC, descrip, body);
+    r = AllocPair(CELL_FUNC, descrip, body);
     return r;
 }
 
@@ -701,7 +778,7 @@ Cell *Eval(Cell *expr, Cell *env)
     int typ;
     Cell *r;
     Cell *f, *args;
-    
+
     typ = GetType(expr);
     switch (typ) {
     case CELL_NUM:
@@ -835,6 +912,7 @@ Lisp_Init(void *arena, size_t arenasize)
         return NULL; // not nearly enough memory to be useful
     }
     lc = (struct LispContext *)arena;
+    memset(lc, 0, sizeof(*lc));
     arenasize -= sizeof(*lc);
     InitGC((void *)(lc+1), arenasize);
     
