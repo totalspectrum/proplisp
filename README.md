@@ -84,7 +84,7 @@ Examples (here ">" is the input prompt):
 > (define a 1)
 1
 > (define b 2)
-1
+2
 > (define f (lambda x x))
 #<lambda>
 > (f a b)
