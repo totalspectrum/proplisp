@@ -65,6 +65,7 @@ static void InitGC(void *base, size_t size) {
 static void MarkUsed(Cell *ptr) {
     int typ;
     if (!ptr) return;
+    if (GetUsed(ptr)) return; // already visited
     SetUsed(ptr);
     typ = GetType(ptr);
     switch (typ) {
@@ -405,14 +406,14 @@ Cell *Tail(Cell *x)
 // returns the value defined
 Cell *Define(Cell *name, Cell *val, Cell *env)
 {
-    Cell *holder = AllocPair(CELL_PAIR, 0, 0);
+    Cell *holder;
     Cell *x;
     Cell *envtail;
     
     x = AllocPair(CELL_REF, name, val);
     envtail = GetTail(env);
 
-    *holder = CellPair(CELL_PAIR, FromPtr(x), FromPtr(envtail));
+    holder = AllocPair(CELL_PAIR, x, envtail);
     SetTail(env, holder);
     return val;
 }
@@ -488,7 +489,7 @@ Cell *Lookup(Cell *name, Cell *env)
     env = Tail(env);
     while (env) {
         holder = GetHead(env);
-        if (!holder) break;
+        if (!holder) continue;
         hname = GetHead(holder);
         if (Match(hname, name)) {
             return holder;
@@ -755,6 +756,7 @@ static Cell *applyLambda(Cell *fn, Cell *args, Cell *env)
     body = GetTail(fn);
     argdescrip = GetHead(newenv);
     newenv = GetTail(newenv);
+    newenv = AllocPair(CELL_PAIR, 0, GetTail(newenv));
 
     // now define arguments if we need to
     if (IsPair(argdescrip)) {
