@@ -604,8 +604,8 @@ Cell *ReadListFromString(const char **str_p)
             // is there more stuff in the string?
             str = *str_p;
             c = *str;
-            if (c && endoflist(c)) {
-                str++;
+            if (endoflist(c)) {
+                if (c) str++;
                 *str_p = str;
                 // nope, no more stuff
                 break;
@@ -962,13 +962,17 @@ Cell *Lisp_Run(const char *buffer, int printIt)
 {
     Cell *r = NULL;
 
-    while (*buffer) {
+    for(;;) {
+        while (isspace(*buffer)) buffer++;
+        if (!*buffer) break;
         r = ReadItemFromString(&buffer);
         r = Eval(r, lc->globalEnv);
         if (printIt) {
             Lisp_Print(r);
             printchar('\n');
         }
+        // ignore spurious close parens
+        while (*buffer == ')') buffer++;
     }
     return r;
 }

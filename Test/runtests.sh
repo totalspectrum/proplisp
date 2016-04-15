@@ -12,7 +12,7 @@ endmsg=$ok
 for i in *.lsp
 do
     j=`basename $i .lsp`
-    echo $i ":" $j
+#    echo $i ":" $j
     $PROG $i > $j.txt
     if diff -ub $j.expect $j.txt
     then
