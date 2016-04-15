@@ -104,7 +104,6 @@ static void doGC() {
 
 Cell *GCAlloc(void) {
     Cell *r;
-#if 0
     
     r = lc->freeList;
     if (!r) {
@@ -117,9 +116,6 @@ Cell *GCAlloc(void) {
         lc->freeCells--;
         lc->freeList = GetTail(r);
     }
-#else
-    r = malloc(sizeof(*r));
-#endif
     return r;
 }
 
@@ -192,24 +188,14 @@ int readchar() {
 }
 
 Cell *CString(const char *str) {
-#if 1
-    Cell *x;
-    Cell *rest;
-#else
     Cell *head;
     Cell *last;
     Cell *next;
-#endif
     int c;
     
     if (!str || (0 == (c = *str)) ) {
         return NULL;
     }
-#if 1
-    rest = CString(str+1);
-    x = AllocRawPair(CELL_STRING, c, FromPtr(rest));
-    return x;
-#else
     c = *str++;
     last = head = AllocRawPair(CELL_STRING, c, 0);
     GC_PROTECT(head);
@@ -219,7 +205,6 @@ Cell *CString(const char *str) {
         last = next;
     }
     return head;
-#endif
 }
 
 Cell *CSymbol(const char *str) {
