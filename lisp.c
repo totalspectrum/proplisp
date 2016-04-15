@@ -745,17 +745,20 @@ static Cell *applyLambda(Cell *fn, Cell *args, Cell *env)
 Cell *Apply(Cell *fn, Cell *args, Cell *env)
 {
     int typ;
-
+    Cell *r;
+    
     fn = Eval(fn, env);
     if (!fn) return NULL;
+    GC_PROTECT(fn);
     typ = GetType(fn);
     if (typ == CELL_CFUNC) {
-        return applyCfunc(fn, args, env);
+        r = applyCfunc(fn, args, env);
     } else if (typ == CELL_FUNC) {
-        return applyLambda(fn, args, env);
+        r = applyLambda(fn, args, env);
     } else {
-        return NULL;
+        r = NULL;
     }
+    return r;
 }
 
 Cell *Eval(Cell *expr, Cell *env)
@@ -824,17 +827,6 @@ Cell *SetBang(Cell *name, Cell *val, Cell *env)
     return val;
 }
 
-// this is like define, but allows recursion
-Cell *DefineFunc(Cell *name, Cell *args, Cell *body, Cell *env)
-{
-    Cell *f;
-    Define(name, CNum(0), env);
-    f = Lambda(args, body, env);
-    SetBang(name, f, env);
-    return f;
-}
-
-
 int Plus(int x, int y) { return x+y; }
 int Minus(int x, int y) { return x-y; }
 int Times(int x, int y) { return x*y; }
@@ -851,7 +843,6 @@ LispCFunction cdefs[] = {
 
     // remember: return val, then args in the C string
     { "lambda", "cCCe", (GenericFunc)Lambda },
-    { "defun", "cCCCe", (GenericFunc)DefineFunc },
     { "eval", "cce", (GenericFunc)Eval },
     { "set!", "cCce", (GenericFunc)SetBang },
     { "print", "cv", (GenericFunc)PrintList },
