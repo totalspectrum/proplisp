@@ -105,11 +105,10 @@ static void doGC() {
 Cell *GCAlloc(void) {
     Cell *r;
     
-    r = lc->freeList;
-    if (!r) {
+    if (lc->freeCells < PENDING_ALLOCS) {
         doGC();
-        r = lc->freeList;
     }
+    r = lc->freeList;
     if (!r) {
         printcstr("out of memory!\n");
     } else {
@@ -216,6 +215,7 @@ Cell *CSymbol(const char *str) {
 Cell *CNum(Num val) {
     Cell *x = GCAlloc();
     *x = CellNum(val);
+    GC_PROTECT(x);
     return x;
 }
 
@@ -392,11 +392,15 @@ Cell *Tail(Cell *x)
 // returns the value defined
 Cell *Define(Cell *name, Cell *val, Cell *env)
 {
-    Cell *holder;
-    Cell *x = AllocPair(CELL_REF, name, val);
-    Cell *envtail = GetTail(env);
+    Cell *holder = AllocPair(CELL_PAIR, 0, 0);
+    Cell *x;
+    Cell *envtail;
+    
+    GC_PROTECT(holder);
+    x = AllocPair(CELL_REF, name, val);
+    envtail = GetTail(env);
 
-    holder = Cons(x, envtail);
+    *holder = CellPair(CELL_PAIR, FromPtr(x), FromPtr(envtail));
     SetTail(env, holder);
     return val;
 }
@@ -620,15 +624,31 @@ Cell *Lambda(Cell *args, Cell *body, Cell *env)
 Cell *Eval(Cell *expr, Cell *env); // forward declaration
 
 // evaluate each member of a list
+// return a new list containing the evaluated values
 Cell *EvalList(Cell *list, Cell *env)
 {
-    Cell *head, *tail;
-    if (IsPair(list)) {
-        head = Eval(Head(list), env);
-        tail = EvalList(Tail(list), env);
-        return Cons(head, tail);
+    Cell *result;
+    Cell *head;
+    Cell *holder;
+    Cell *cur;
+    
+    result = AllocPair(CELL_PAIR, 0, 0);
+    GC_PROTECT(result);
+    
+    while (list) {
+        if (IsPair(list)) {
+            head = Head(list);
+            list = Tail(list);
+        } else {
+            head = list;
+            list = NULL;
+        }
+        holder = AllocPair(CELL_PAIR, 0, 0);
+        Append(result, holder);
+        cur = Eval(head, env);
+        SetHead(holder, cur);
     }
-    return Eval(list, env);
+    return Tail(result);
 }
 
 static Cell *argMismatch()
