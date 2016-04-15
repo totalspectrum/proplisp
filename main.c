@@ -1,19 +1,54 @@
+//
+// lisp interpreter REPL (read-evaluate-print loop)
+// 
 #include <stdio.h>
 #include <stdlib.h>
 #include "lisp.h"
 
 #ifdef __propeller__
 #include <propeller.h>
-#define ARENA_SIZE 2048
+#define ARENA_SIZE 4096
 #else
-#define ARENA_SIZE 8192
+#define ARENA_SIZE 32768
 #define MAX_SCRIPT_SIZE 100000
+#endif
+
+// make these whatever you need to switch terminal to
+// raw or cooked mode
+
+#ifdef __linux__
+#include <termios.h>
+#include <unistd.h>
+struct termios origt, rawt;
+
+void setraw() {
+    setvbuf(stdout, NULL, _IONBF, 0);
+    setvbuf(stdin, NULL, _IONBF, 0);
+
+    tcgetattr(fileno(stdin), &origt);
+    rawt = origt;
+    cfmakeraw(&rawt);
+    tcsetattr(fileno(stdin), TCSAFLUSH, &rawt);
+}
+void setcooked() {
+    tcsetattr(fileno(stdin), TCSAFLUSH, &origt);
+}
+#else
+// make these whatever you need to switch terminal to
+// raw or cooked mode
+void setraw() {
+}
+void setcooked() {
+}
 #endif
 
 int inchar() {
     return getchar();
 }
 void outchar(int c) {
+    if (c == '\n') {
+        putchar('\r');
+    }
     putchar(c);
 }
 
@@ -92,16 +127,116 @@ LispCFunction defs[] = {
     { NULL, 0 }
 };
 
+//
+// an attempt to provide a "nice" read-evaluate-print loop
+// we count ( and prompt the user based on those,
+// only evaluating when the expression is done
+//
+#define SIZE 256
+
+void prompt(int n) {
+    if (n < 0) {
+        outchar('?');
+    }
+    while (n > 0) {
+        outchar('>');
+        --n;
+    }
+    outchar(' ');
+}
+
+void outstr(const char *s) {
+    int c;
+    while (0 != (c = *s++)) outchar(c);
+}
+
+char *
+getOneLine()
+{
+    static char buf[SIZE];
+    char *ptr = buf;
+    int strcount = 0;
+    int instring = 0;
+    int c;
+    int parencount = 0;
+    
+    prompt(1);
+    for(;;) {
+        c = inchar();
+        switch (c) {
+        case 3:  // ^C means terminate
+            outchar('\n');
+            return NULL;
+        case 8: // ^H is backspace
+        case 127:
+            if (strcount > 0) {
+                --ptr;
+                --strcount;
+                c = buf[strcount]; // the character we are about to erase
+                if (c == '"') instring = !instring;
+                else if (c == '(') --parencount;
+                else if (c == ')') ++parencount;
+                else if (c == '\n') {
+                    // OK, this is cute, we're going to back up a line
+                    outchar('\n');
+                    buf[strcount+1] = 0;
+                    prompt(parencount);
+                    outstr(buf);
+                } else {
+                    c = 8;
+                    outchar(c); outchar(' '); outchar(c);
+                }
+            }
+            break;
+        case '"':
+            instring = !instring;
+            goto output;
+        case '(':
+            if (!instring) parencount++;
+            goto output;
+        case ')':
+            if (!instring) --parencount;
+            goto output;
+        case '\n':
+        case '\r':
+            c = '\n';
+            outchar(c);
+            *ptr++ = c;
+            if (parencount > 0) {
+                prompt(parencount+1);
+            } else {
+                *ptr++ = 0;
+                return buf;
+            }
+            break;
+        output:
+        default:
+            outchar(c);
+            *ptr++ = c;
+            strcount++;
+        }
+    }
+
+    return buf;
+}
+
 void
 REPL()
 {
-    char buf[128];
-     
+    char *ptr;
+    Cell *result;
+
+    setraw();
     for(;;) {
-        printf("> "); fflush(stdout);
-        fgets(buf, sizeof(buf), stdin);
-        Lisp_Run(buf, 1);
+        ptr = getOneLine();
+        if (!ptr) {
+            break;
+        }
+        result = Lisp_Run(ptr, 0);
+        Lisp_Print(result);
+        outchar('\n');
     }
+    setcooked();
 }
 
 char arena[ARENA_SIZE];
@@ -111,7 +246,9 @@ main(int argc, char **argv)
 {
     Cell *err;
     int i;
-    
+
+#ifndef __propeller__
+#endif
     err = Lisp_Init(arena, sizeof(arena));
     for (i = 0; err && defs[i].name; i++) {
         err = Lisp_DefineCFunc(&defs[i]);
