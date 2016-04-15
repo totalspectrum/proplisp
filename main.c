@@ -46,9 +46,9 @@ static intptr_t getcnt_fn()
 {
     return CNT;
 }
-static intptr_t waitcnt_fn(intptr_t when)
+static intptr_t wait_fn(intptr_t when)
 {
-    waitcnt(when);
+    waitcnt(CNT + when);
     return when;
 }
 static intptr_t pinout_fn(intptr_t pin, intptr_t onoff)
@@ -85,7 +85,7 @@ LispCFunction defs[] = {
     { "getcnt",    "n",   (GenericFunc)getcnt_fn },
     { "pinout",    "nnn", (GenericFunc)pinout_fn },
     { "pinin",     "nn",  (GenericFunc)pinin_fn },
-    { "waitcnt",   "nn",  (GenericFunc)waitcnt_fn },
+    { "wait",      "nn",  (GenericFunc)wait_fn },
 #else
     { "dsqr",      "nnn", (GenericFunc)testfunc },
 #endif
