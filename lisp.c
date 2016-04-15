@@ -13,22 +13,12 @@ static struct LispContext {
     Cell *globalQuote; // the quote function
 
     Cell *freeList;   // list of free nodes
-    // we also keep a circular buffer of MAX_ALLOC allocations that will
-    // not be reclaimed by garbage collection
-    Cell *pendingAlloc[PENDING_ALLOCS];
-    int   paptr;
-    
     Cell *base;        // base of memory
     size_t totalCells; // number of cells in memory
     size_t freeCells;  // number of free cells
-} *lc;
 
-static void GC_PROTECT(Cell *x) {
-    if (!x) return;
-    lc->pendingAlloc[lc->paptr++] = x;
-    if (lc->paptr == PENDING_ALLOCS)
-        lc->paptr = 0;
-}
+    uintptr_t *stackTop;
+} *lc;
 
 // mark all cells free, pending sweep for used cells
 static void MarkFree(void) {
@@ -67,11 +57,12 @@ static void CollectFree(void) {
 static void InitGC(void *base, size_t size) {
     lc->base = base;
     lc->totalCells = size / sizeof(Cell);
+    lc->stackTop = (uintptr_t *)&size;  // for garbage collection
     MarkFree();
     CollectFree();
 }
 
-static void doMarkUsed(Cell *ptr) {
+static void MarkUsed(Cell *ptr) {
     int typ;
     if (!ptr) return;
     SetUsed(ptr);
@@ -80,23 +71,49 @@ static void doMarkUsed(Cell *ptr) {
     case CELL_REF:
     case CELL_PAIR:
     case CELL_FUNC:
-        doMarkUsed(GetHead(ptr));
+        MarkUsed(GetHead(ptr));
         /* fall through */
     case CELL_STRING:
     case CELL_SYMBOL:
-        doMarkUsed(GetTail(ptr));
+        MarkUsed(GetTail(ptr));
     default:
         break;
     }
 }
 
-static void doGC() {
-    int i;
-    MarkFree();
-    doMarkUsed(lc->globalEnv);
-    for (i = 0; i < PENDING_ALLOCS; i++) {
-        doMarkUsed(lc->pendingAlloc[i]);
+static void markStack(uintptr_t *low, uintptr_t *high)
+{
+    uintptr_t arenalow, arenahigh;
+    uintptr_t dest;
+    
+    if (low > high) {
+        uintptr_t *temp = low;
+        low = high;
+        high = temp;
     }
+    arenalow = (uintptr_t)lc->base;
+    arenahigh = (uintptr_t)(lc->base + lc->totalCells);
+    while (low < high) {
+        dest = *low++;
+        if (dest >= arenalow && dest < arenahigh) {
+            MarkUsed((Cell *)dest);
+        }
+    }
+}
+
+static void doGC() {
+    uintptr_t i;
+
+    // mark everything as free
+    MarkFree();
+
+    // mark the ones used in our environment
+    MarkUsed(lc->globalEnv);
+
+    // now see if anything on the stack looks like
+    // it might be a pointer into our arena;
+    // if so, mark it used
+    markStack(&i, lc->stackTop);
     CollectFree();
 }
 
@@ -134,7 +151,6 @@ Cell *Cons(Cell *head, Cell *tail)
 {
     Cell *r;
     r = AllocPair(CELL_PAIR, head, tail);
-    GC_PROTECT(r);
     return r;
 }
 
@@ -197,7 +213,6 @@ Cell *CString(const char *str) {
     }
     c = *str++;
     last = head = AllocRawPair(CELL_STRING, c, 0);
-    GC_PROTECT(head);
     while (0 != (c = *str++)) {
         next = AllocRawPair(CELL_STRING, c, 0);
         SetTail(last, next);
@@ -215,7 +230,6 @@ Cell *CSymbol(const char *str) {
 Cell *CNum(Num val) {
     Cell *x = GCAlloc();
     *x = CellNum(val);
-    GC_PROTECT(x);
     return x;
 }
 
@@ -283,7 +297,6 @@ static Cell *doNumToString(UNum x, unsigned base, int prec) {
         if (c < 10) c += '0';
         else c = (c - 10) + 'A';
         onedigit = AllocRawPair(CELL_STRING, c, 0);
-        GC_PROTECT(onedigit);
         result = Append(onedigit, result);
         digits++;
     }
@@ -396,7 +409,6 @@ Cell *Define(Cell *name, Cell *val, Cell *env)
     Cell *x;
     Cell *envtail;
     
-    GC_PROTECT(holder);
     x = AllocPair(CELL_REF, name, val);
     envtail = GetTail(env);
 
@@ -492,7 +504,6 @@ Cell *ReadQuotedString(const char **str_p) {
     Cell *result = AllocPair(CELL_PAIR, 0, 0);
     int c;
     const char *str = *str_p;
-    GC_PROTECT(result);
     for(;;) {
         c = *str++;
         if (!c) break;
@@ -633,7 +644,6 @@ Cell *EvalList(Cell *list, Cell *env)
     Cell *cur;
     
     result = AllocPair(CELL_PAIR, 0, 0);
-    GC_PROTECT(result);
     
     while (list) {
         if (IsPair(list)) {
@@ -769,7 +779,6 @@ Cell *Apply(Cell *fn, Cell *args, Cell *env)
     
     fn = Eval(fn, env);
     if (!fn) return NULL;
-    GC_PROTECT(fn);
     typ = GetType(fn);
     if (typ == CELL_CFUNC) {
         r = applyCfunc(fn, args, env);
