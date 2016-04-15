@@ -125,11 +125,12 @@ Cell *GCAlloc(void) {
     
     if (lc->freeCells < PENDING_ALLOCS) {
         doGC();
+        if (lc->freeCells < PENDING_ALLOCS) {
+            printcstr("out of memory!\n");
+        }
     }
     r = lc->freeList;
-    if (!r) {
-        printcstr("out of memory!\n");
-    } else {
+    if (r) {
         lc->freeCells--;
         lc->freeList = GetTail(r);
     }
@@ -862,6 +863,7 @@ int Plus(int x, int y) { return x+y; }
 int Minus(int x, int y) { return x-y; }
 int Times(int x, int y) { return x*y; }
 int Div(int x, int y) { return x/y; }
+int GCFree(void) { return lc->freeCells; }
 
 Cell *Lt(int x, int y) { return (x < y) ? lc->globalTrue : NULL; }
 Cell *Le(int x, int y) { return (x <= y) ? lc->globalTrue : NULL; }
@@ -874,8 +876,8 @@ LispCFunction cdefs[] = {
 
     // remember: return val, then args in the C string
     { "lambda", "cCCe", (GenericFunc)Lambda },
+    { "gcfree", "n", (GenericFunc)GCFree },
     { "eval", "cce", (GenericFunc)Eval },
-    { "set!", "cCce", (GenericFunc)SetBang },
     { "print", "cv", (GenericFunc)PrintList },
     { "define", "cCce", (GenericFunc)Define },
     { "number?", "cc", (GenericFunc)IsNumber },
@@ -894,6 +896,7 @@ LispCFunction cdefs[] = {
     { "cons", "ccc", (GenericFunc)Cons },
     { "head", "cc", (GenericFunc)Head },
     { "tail", "cc", (GenericFunc)Tail },
+    { "set!", "cCce", (GenericFunc)SetBang },
     { "/", "nnn", (GenericFunc)Div },
     { "*", "nnn", (GenericFunc)Times },
     { "-", "nnn", (GenericFunc)Minus },

@@ -85,7 +85,7 @@ LispCFunction defs[] = {
     { "getcnt",    "n",   (GenericFunc)getcnt_fn },
     { "pinout",    "nnn", (GenericFunc)pinout_fn },
     { "pinin",     "nn",  (GenericFunc)pinin_fn },
-    { "waitcnt",   "nnn", (GenericFunc)waitcnt_fn },
+    { "waitcnt",   "nn",  (GenericFunc)waitcnt_fn },
 #else
     { "dsqr",      "nnn", (GenericFunc)testfunc },
 #endif
