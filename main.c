@@ -33,6 +33,13 @@ void setraw() {
 void setcooked() {
     tcsetattr(fileno(stdin), TCSAFLUSH, &origt);
 }
+#elif defined(__propeller__)
+void setraw() {
+    stdin->_flag &= ~_IOCOOKED;
+}
+void setcooked() {
+    stdin->_flag |= _IOCOOKED;
+}
 #else
 // make these whatever you need to switch terminal to
 // raw or cooked mode
@@ -154,33 +161,35 @@ char *
 getOneLine()
 {
     static char buf[SIZE];
-    char *ptr = buf;
     int strcount = 0;
     int instring = 0;
-    int c;
+    int c, i;
     int parencount = 0;
+    int firstprompt = 1;
     
-    prompt(1);
+    prompt(firstprompt);
     for(;;) {
+        buf[strcount] = 0;
         c = inchar();
         switch (c) {
+        case 12: // ^L means refresh
+            outchar('\n');
+            outstr(buf);
+            break;
         case 3:  // ^C means terminate
             outchar('\n');
             return NULL;
         case 8: // ^H is backspace
         case 127:
             if (strcount > 0) {
-                --ptr;
-                --strcount;
-                c = buf[strcount]; // the character we are about to erase
+                c = buf[--strcount]; // the character we are about to erase
                 if (c == '"') instring = !instring;
                 else if (c == '(') --parencount;
                 else if (c == ')') ++parencount;
-                else if (c == '\n') {
+                if (c == '\n') {
                     // OK, this is cute, we're going to back up a line
                     outchar('\n');
-                    buf[strcount+1] = 0;
-                    prompt(parencount);
+                    buf[strcount] = 0;
                     outstr(buf);
                 } else {
                     c = 8;
@@ -201,19 +210,26 @@ getOneLine()
         case '\r':
             c = '\n';
             outchar(c);
-            *ptr++ = c;
+            buf[strcount++] = c;
+            buf[strcount] = 0;
+            if (firstprompt) {
+                outstr(buf);
+                firstprompt = 0;
+            }
             if (parencount > 0) {
-                prompt(parencount+1);
+                for (i = 0; i < parencount; i++) {
+                    outchar(' ');
+                    buf[strcount++] = ' ';
+                }
+                buf[strcount] = 0;
             } else {
-                *ptr++ = 0;
                 return buf;
             }
             break;
         output:
         default:
             outchar(c);
-            *ptr++ = c;
-            strcount++;
+            buf[strcount++] = c;
         }
     }
 
