@@ -24,6 +24,8 @@ Scheme. A lot of useful features are left out. The only data types
 are numbers, strings (delimited by double quotes), symbols, builtin functions,
 lambda functions, and of course pairs.
 
+Numbers are only 28 bits (the other 4 bits are used for tag values).
+
 The empty list () represents false; any other value is considered true.
 A particular value `#t` is the "preferred" form of true.
 
