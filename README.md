@@ -63,6 +63,15 @@ The interpreter defines the following functions by default:
 (lambda a b) -- creates a function, see below
 ```
 
+In the sample program provided for the Parallax Propeller,
+there are the following additional functions:
+```
+(waitms n) -- wait for n milliseconds
+(pinout p x) -- set pin p to low (if x == 0) or high (if x <> 0)
+(pinin p) -- return the value of input pin p (1 or 0)
+(getcnt)  -- get the low 28 bits of the current system timer value 
+```
+
 Lambda
 ------
 The general form of a function definition is `(lambda args body)`.
@@ -172,3 +181,16 @@ To run a script, use `Lisp_Run(script, print)`. Here
 the results should be printed. Each Lisp expression in the script
 is evaluated, one after the other, and if `print` is true the result
 is printed.
+
+The Sample Program
+==================
+
+The sample main.c illustrates some of the features of the interpreter
+and how to hook it up to your C application.
+
+There is also a very simple editor provided. Commands are:
+
+^L: refresh
+^C: abort
+^H: backspace; if you backspace past the beginning of line the previous
+    lines will be shown

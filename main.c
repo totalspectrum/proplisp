@@ -83,15 +83,18 @@ runscript(const char *filename)
 #endif
 
 #ifdef __propeller__
+#include <unistd.h>
 
 static intptr_t getcnt_fn()
 {
     return CNT;
 }
-static intptr_t wait_fn(intptr_t when)
+
+// wait for ms millisconds
+static intptr_t waitms_fn(intptr_t ms)
 {
-    waitcnt(CNT + when);
-    return when;
+    usleep(ms * 1000);
+    return ms;
 }
 static intptr_t pinout_fn(intptr_t pin, intptr_t onoff)
 {
@@ -127,7 +130,7 @@ LispCFunction defs[] = {
     { "getcnt",    "n",   (GenericFunc)getcnt_fn },
     { "pinout",    "nnn", (GenericFunc)pinout_fn },
     { "pinin",     "nn",  (GenericFunc)pinin_fn },
-    { "wait",      "nn",  (GenericFunc)wait_fn },
+    { "waitms",    "nn",  (GenericFunc)waitms_fn },
 #else
     { "dsqr",      "nnn", (GenericFunc)testfunc },
 #endif
@@ -242,9 +245,10 @@ REPL()
     char *ptr;
     Cell *result;
 
-    setraw();
     for(;;) {
+        setraw();
         ptr = getOneLine();
+        setcooked();
         if (!ptr) {
             break;
         }
@@ -252,7 +256,6 @@ REPL()
         Lisp_Print(result);
         outchar('\n');
     }
-    setcooked();
 }
 
 char arena[ARENA_SIZE];
