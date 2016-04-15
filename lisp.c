@@ -863,7 +863,7 @@ int Plus(int x, int y) { return x+y; }
 int Minus(int x, int y) { return x-y; }
 int Times(int x, int y) { return x*y; }
 int Div(int x, int y) { return x/y; }
-int GCFree(void) { return lc->freeCells; }
+int GCFree(void) { doGC(); return lc->freeCells; }
 
 Cell *Lt(int x, int y) { return (x < y) ? lc->globalTrue : NULL; }
 Cell *Le(int x, int y) { return (x <= y) ? lc->globalTrue : NULL; }
@@ -882,7 +882,6 @@ LispCFunction cdefs[] = {
     { "define", "cCce", (GenericFunc)Define },
     { "number?", "cc", (GenericFunc)IsNumber },
     { "pair?", "cc", (GenericFunc)IsPair },
-    { "eq?", "ccc", (GenericFunc)Match },
     { "begin", "cv", (GenericFunc)Sequence },
     { "while", "cCCe", (GenericFunc)While },
     { "if", "ccCCe", (GenericFunc)If },
