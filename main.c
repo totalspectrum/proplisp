@@ -36,7 +36,7 @@ runscript(const char *filename)
         return;
     }
     script[r] = 0;
-    Lisp_Run(script);
+    Lisp_Run(script, 1);
 }
 #endif
 
@@ -96,14 +96,11 @@ void
 REPL()
 {
     char buf[128];
-    Cell *r;
-    
+     
     for(;;) {
         printf("> "); fflush(stdout);
         fgets(buf, sizeof(buf), stdin);
-        r = Lisp_Run(buf);
-        Lisp_Print(r);
-        printf("\n"); fflush(stdout);
+        Lisp_Run(buf, 1);
     }
 }
 

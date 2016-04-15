@@ -95,12 +95,11 @@ static INLINE void *GetHead(Cell *ptr) {
     return ToPtr(GetHeadVal(ptr));
 }
 
-static INLINE void SetUsed(Cell *ptr, int x) {
-    if (x) {
-        *ptr |= 0x8;
-    } else {
-        *ptr &= ~(Num)0x8;
-    }
+static INLINE void SetUsed(Cell *ptr) {
+    *ptr |= 0x8;
+}
+static INLINE void SetFree(Cell *ptr) {
+    *ptr &= ~(Num)0x8;
 }
 static INLINE void SetType(Cell *ptr, int x) {
     *ptr &= ~0x7;
@@ -110,7 +109,7 @@ static INLINE Num GetNum(Cell *ptr) {
     return (Num)(*ptr)>>4;
 }
        
-static void SetTail(Cell *ptr, Cell *val) {
+static INLINE void SetTail(Cell *ptr, Cell *val) {
     Cell r = *ptr;
     uint32_t v = FromPtr(val);
     r &= ~ ((Cell)PTRMASK<<4);
@@ -118,11 +117,11 @@ static void SetTail(Cell *ptr, Cell *val) {
     *ptr = r;
 }
 
-static inline Cell CellNum(Num val) {
+static INLINE Cell CellNum(Num val) {
     return (val << 4) | CELL_NUM;
 }
 
-static inline Cell CellPair(int typ, uint32_t head, uint32_t tail) {
+static INLINE Cell CellPair(int typ, uint32_t head, uint32_t tail) {
     return (((Cell)head) <<HEADSHIFT) | (((Cell)tail)<<4) | (typ & 0x7);
 }
 

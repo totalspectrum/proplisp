@@ -6,3 +6,6 @@ lisp: main.c lisp.c lisp.h cell.h
 
 clean:
 	rm -f lisp *.o
+
+test: lisp
+	(cd Test; ./runtests.sh)

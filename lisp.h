@@ -39,7 +39,8 @@ Cell *Lisp_Print(Cell *expr);
 
 // run a string script
 // returns last expression in script
-Cell *Lisp_Run(const char *buffer);
+// if printIt is 1, prints the result
+Cell *Lisp_Run(const char *buffer, int printIt);
 
 // initialize everything
 // returns a pointer to the global environment

@@ -5,13 +5,68 @@
 
 /* our context */
 static struct LispContext {
-    Cell *globalEnv;
-    Cell *globalTrue;
-    Cell *globalQuote;
-} theContext, *lc;
+    Cell *globalEnv;  // the root environment for definitions
+    Cell *globalTrue; // the default "true" value
+    Cell *globalQuote; // the quote function
+
+    Cell *freeList;   // list of free nodes
+    Cell *protectEnv; // anything pointed to by this will not be reclaimed in GC
+
+    Cell *base;        // base of memory
+    size_t totalCells; // number of cells in memory
+    size_t freeCells;  // number of free cells
+} *lc;
+
+// mark all cells free, pending sweep for used cells
+static void MarkFree(void) {
+    size_t i, n;
+    Cell *ptr = lc->base;
+    n = lc->totalCells;
+    for (i = 0; i < n; i++) {
+        SetFree(ptr);
+        ptr++;
+    }
+}
+
+// collect all free cells into our free list
+// and clear the "used" bit on others
+static void CollectFree(void) {
+    size_t i, n;
+    Cell *ptr = lc->base;
+    Cell *freelist = 0;
+    size_t numFree = 0;
+    
+    n = lc->totalCells;
+    for (i = 0; i < n; i++) {
+        if (GetUsed(ptr)) {
+            SetFree(ptr);
+        } else {
+            SetTail(ptr, freelist);
+            freelist = ptr;
+            numFree++;
+        }
+        ptr++;
+    }
+    lc->freeCells = numFree;
+    lc->freeList = freelist;
+}
+
+static void InitGC(void *base, size_t size) {
+    lc->base = base;
+    lc->totalCells = size / sizeof(Cell);
+    lc->protectEnv = 0;
+    MarkFree();
+    CollectFree();
+}
 
 Cell *Alloc() {
-    return (Cell *)malloc(sizeof(Cell));
+    Cell *r = lc->freeList;
+    if (r) {
+        lc->freeCells--;
+        lc->freeList = GetTail(r);
+        return r;
+    }
+    return NULL;
 }
 
 Cell *RawPair(int typ, uint32_t head, uint32_t tail)
@@ -405,10 +460,17 @@ Cell *ReadItemFromString(const char **str_p)
     int c;
     const char *str = *str_p;
     int alldigits = 1;
-    
+again:
     do {
         c = *str++;
     } while (isspace(c));
+    if (c == ';') {
+        // skip to end of line
+        do {
+            c = *str++;
+        } while (c && c != '\n');
+        if (c) goto again;
+    }
     *str_p = str;
     // collect the next token
     if (startoflist(c)) {
@@ -769,10 +831,16 @@ Lisp_Init(void *arena, size_t arenasize)
 {
     LispCFunction *f;
 
-    lc = &theContext;
+    if (arenasize <= (4*sizeof(*lc))) {
+        return NULL; // not nearly enough memory to be useful
+    }
+    lc = (struct LispContext *)arena;
+    arenasize -= sizeof(*lc);
+    InitGC((void *)(lc+1), arenasize);
     
     lc->globalEnv = Cons(NULL, NULL);
     lc->globalTrue = CString("#t");
+
     Define(lc->globalTrue, lc->globalTrue, lc->globalEnv);
     Define(CSymbol("nl"), CString("\n"), lc->globalEnv);
     f = cdefs;
@@ -803,60 +871,17 @@ Cell *Lisp_Eval(Cell *x) {
     return Eval(x, lc->globalEnv);
 }
 
-Cell *Lisp_Run(const char *buffer)
+Cell *Lisp_Run(const char *buffer, int printIt)
 {
     Cell *r = NULL;
 
     while (*buffer) {
         r = ReadItemFromString(&buffer);
         r = Eval(r, lc->globalEnv);
+        if (printIt) {
+            Lisp_Print(r);
+            printchar('\n');
+        }
     }
     return r;
 }
-
-#ifdef TEST
-int
-main(int argc, char **argv)
-{
-    char buf[512];
-    const char *ptr;
-    
-    Init();
-#if 0
-    {
-        int i;
-        static Cell *a, *b;
-        Cell *t;
-        a = Alloc();
-        b = Alloc();
-        printf("a=%p b=%p\n", a, b);
-        t = RawPair(1, FromPtr(a), FromPtr(b));
-        printf("head=%p, tail=%p\n", GetHead(t), GetTail(t));
-    
-        printf("numbers:\n");
-        Print(CNum(0)); printchar('\n');
-        Print(CNum(1)); printchar('\n');
-        Print(CNum(-17)); printchar('\n');
-
-        printf("strings:\n");
-        Print(CString("hello, world!\n"));
-
-        printf("check for matches\n");
-        printf("7=17: "); Lisp_Print(Match(CNum(7), CNum(17))); printf("\n");
-        printf("-2=-2: "); Lisp_Print(Match(CNum(-2), CNum(-2))); printf("\n");
-    }
-#endif
-    
-    for(;;) {
-        Cell *x;
-        printf("interactive> "); fflush(stdout);
-        ptr = buf;
-        fgets(buf, sizeof(buf), stdin);
-        x = ReadItemFromString(&ptr);
-        x = Eval(x, lc->globalEnv);
-        Lisp_Print(x);
-        printf("\n");
-    }
-    return 0;
-}
-#endif
