@@ -215,11 +215,11 @@ getOneLine()
             outchar(c);
             buf[strcount++] = c;
             buf[strcount] = 0;
-            if (firstprompt) {
-                outstr(buf);
-                firstprompt = 0;
-            }
             if (parencount > 0) {
+                if (firstprompt) {
+                    outstr(buf);
+                    firstprompt = 0;
+                }
                 for (i = 0; i < parencount; i++) {
                     outchar(' ');
                     buf[strcount++] = ' ';
