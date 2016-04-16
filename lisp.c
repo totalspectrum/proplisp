@@ -4,6 +4,8 @@
 #include <ctype.h>
 #include "lisp.h"
 
+static Cell *doLookup(Cell *name, Cell *env, int stopOnBoundary);
+
 #define PENDING_ALLOCS 16
 
 /* our context */
@@ -404,13 +406,21 @@ Cell *Tail(Cell *x)
     return NULL;
 }
 
+// define a new value, or redefine an existing one
+// in the current environment
 // returns the value defined
 Cell *Define(Cell *name, Cell *val, Cell *env)
 {
     Cell *holder;
     Cell *x;
     Cell *envtail;
-    
+
+    // look for it in the current environment
+    x = doLookup(name, env, 1); // stop at environment boundaries
+    if (x && GetType(x) == CELL_REF) {
+        SetTail(x, val);
+        return val;
+    }
     x = AllocPair(CELL_REF, name, val);
     envtail = GetTail(env);
 
@@ -482,8 +492,9 @@ Cell *NoMatch(Cell *a, Cell *b)
 {
     return doMatch(a, b, NULL, lc->globalTrue);
 }
+
 // find a symbol ref
-Cell *Lookup(Cell *name, Cell *env)
+static Cell *doLookup(Cell *name, Cell *env, int stopOnBoundary)
 {
     Cell *holder = NULL;
     Cell *hname = NULL;
@@ -494,14 +505,24 @@ Cell *Lookup(Cell *name, Cell *env)
     env = Tail(env);
     while (env) {
         holder = GetHead(env);
-        if (!holder) continue;
-        hname = GetHead(holder);
-        if (Match(hname, name)) {
-            return holder;
+        if (holder) {
+            hname = GetHead(holder);
+            if (Match(hname, name)) {
+                return holder;
+            }
+        } else {
+            if (stopOnBoundary) {
+                return NULL;
+            }
         }
         env = GetTail(env);
     }
     return NULL;
+}
+
+Cell *Lookup(Cell *name, Cell *env)
+{
+    return doLookup(name, env, 0);  // never stop at an environment boundary
 }
 
 Cell *ReadListFromString(const char **str_p);
@@ -621,11 +642,7 @@ Cell *ReadListFromString(const char **str_p)
     return result;
 }
 
-//
-// lambda creates a function as follows:
-// ( (args, env) body )
-//
-
+#ifdef OPTIMIZE_LAMBDA
 Cell *Contains(Cell *list, Cell *target) {
     if (!list) return NULL;
     if (Match(list, target)) {
@@ -640,46 +657,62 @@ Cell *Contains(Cell *list, Cell *target) {
     }
     return NULL;
 }
+#endif
 
 // helper function for Lambda: lookup references when we can
-Cell *Compile(Cell *body, Cell *args, Cell *env) {
-#if 0
-    return body;
-#else
-    // FIXME: we need to avoid capture of arguments
+static Cell *Compile(Cell *body, Cell *exclude, Cell *env) {
+#ifdef OPTIMIZE_LAMBDA
+    // we need to avoid capture of arguments
+    // FIXME: what about defines within the body!?
+    
     Cell *r, *t, *h;
     if (!body) {
         return NULL;
     }
     if (GetType(body) == CELL_SYMBOL) {
         // avoid arg capture
-        if (args && Contains(args, body)) {
+        if (args && Contains(exclude, body)) {
             return body;
         }
         // OK, see if it's in the parent environment
         r = Lookup(body, env);
-        if (r) return r;
+        if (r) {
+            // we'd like to return r, but this will be fatal if
+            // the user has defined a local variable that shadows r
+            // possible workarounds: (1) parse defines and
+            // add them to the exclude list, (2) only capture C
+            // functions and disallow redefining them
+            // for now punt and do neither
+            return r;
+        }
     }
     if (IsPair(body)) {
         h = GetHead(body);
         t = GetTail(body);
         return Cons(Compile(h, args, env), Compile(t, args, env));
     }
-    return body;
 #endif
+    return body;
 }
 
 //
+// lambda creates a function as follows:
+// ( (args, env) body )
+//
+
 Cell *Lambda(Cell *args, Cell *body, Cell *env)
 {
     Cell *descrip;
-    Cell *oldenv = Tail(env);
+    Cell *oldenv = env;
     Cell *newenv = Cons(NULL, oldenv);
     Cell *r;
 
     // fixme some sanity checking here would be nice!
     descrip = Cons(args, newenv);
-    r = AllocPair(CELL_FUNC, descrip, Compile(body, args, newenv));
+    // do any optimization we can
+    body = Compile(body, args, newenv);
+    // now create the pair
+    r = AllocPair(CELL_FUNC, descrip, body);
     return r;
 }
 
@@ -743,7 +776,7 @@ static Cell *applyCfunc(Cell *fn, Cell *args, Cell *env)
         if (c == 'v') {
             argv[i++] = EvalList(args, env);
             args = NULL;
-            break;
+            continue;  // there may be an 'e' specification
         }
         argv[i] = args ? GetHead(args) : 0;
         if (islower(c)) {
@@ -933,7 +966,7 @@ LispCFunction cdefs[] = {
     { "define", "cCce", (GenericFunc)Define },
     { "number?", "cc", (GenericFunc)IsNumber },
     { "pair?", "cc", (GenericFunc)IsPair },
-    { "begin", "cv", (GenericFunc)Sequence },
+    { "begin", "cve", (GenericFunc)Sequence },
     { "while", "cCCe", (GenericFunc)While },
     { "if", "ccCCe", (GenericFunc)If },
     { "=", "ccc", (GenericFunc)Match },

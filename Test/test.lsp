@@ -19,7 +19,7 @@ x
 (define f (lambda (y) (+ x y)))
 (f 7) ; should produce 10
 (define x 4)
-(f -1) ; should produce 2
+(f -1) ; should produce 4 - 1 = 3
 ;;; test macros
 (define a 2)
 (define b 3)

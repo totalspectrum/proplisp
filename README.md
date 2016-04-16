@@ -72,6 +72,23 @@ there are the following additional functions:
 (getcnt)  -- get the low 28 bits of the current system timer value 
 ```
 
+Some Notes
+----------
+A few things to note about this version of Lisp:
+
+`define` will create a new definition in the current scope; it will never
+create a definition in a containing scope (e.g. a function cannot use
+`define` to create a global definition).
+
+`setq`, however, will change any existing definition it can find, even
+in a higher scope. However, it will not create a new definition.
+
+The arithmetic operators `+`, `-`, and so on, require exactly two arguments.
+Unary `-` can be achieved with `(- 0 x)`.
+
+`car` and `cdr` are called `head` and `tail`. You are free of course to
+do `(define car head)` and so on.
+
 Lambda
 ------
 The general form of a function definition is `(lambda args body)`.

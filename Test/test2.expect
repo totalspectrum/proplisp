@@ -1,0 +1,11 @@
+99
+1
+#<lambda>
+(1 2 3)
+#<lambda>
+(define getx (lambda () x))
+#<lambda>
+99
+#<lambda>
+99
+done
