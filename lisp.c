@@ -487,6 +487,10 @@ Cell *Lookup(Cell *name, Cell *env)
 {
     Cell *holder = NULL;
     Cell *hname = NULL;
+
+    if (GetType(name) == CELL_REF) {
+        return name; // already a reference
+    }
     env = Tail(env);
     while (env) {
         holder = GetHead(env);
@@ -621,6 +625,51 @@ Cell *ReadListFromString(const char **str_p)
 // lambda creates a function as follows:
 // ( (args, env) body )
 //
+
+Cell *Contains(Cell *list, Cell *target) {
+    if (!list) return NULL;
+    if (Match(list, target)) {
+        return target;
+    }
+    if (IsPair(list)) {
+        Cell *r;
+        
+        r = Contains(Head(list), target);
+        if (!r) r = Contains(Tail(list), target);
+        return r;
+    }
+    return NULL;
+}
+
+// helper function for Lambda: lookup references when we can
+Cell *Compile(Cell *body, Cell *args, Cell *env) {
+#if 0
+    return body;
+#else
+    // FIXME: we need to avoid capture of arguments
+    Cell *r, *t, *h;
+    if (!body) {
+        return NULL;
+    }
+    if (GetType(body) == CELL_SYMBOL) {
+        // avoid arg capture
+        if (args && Contains(args, body)) {
+            return body;
+        }
+        // OK, see if it's in the parent environment
+        r = Lookup(body, env);
+        if (r) return r;
+    }
+    if (IsPair(body)) {
+        h = GetHead(body);
+        t = GetTail(body);
+        return Cons(Compile(h, args, env), Compile(t, args, env));
+    }
+    return body;
+#endif
+}
+
+//
 Cell *Lambda(Cell *args, Cell *body, Cell *env)
 {
     Cell *descrip;
@@ -630,7 +679,7 @@ Cell *Lambda(Cell *args, Cell *body, Cell *env)
 
     // fixme some sanity checking here would be nice!
     descrip = Cons(args, newenv);
-    r = AllocPair(CELL_FUNC, descrip, body);
+    r = AllocPair(CELL_FUNC, descrip, Compile(body, args, newenv));
     return r;
 }
 
@@ -818,6 +867,8 @@ Cell *Eval(Cell *expr, Cell *env)
         f = GetHead(expr);
         args = GetTail(expr);
         return Apply(f, args, env);
+    case CELL_REF:
+        return GetTail(expr);
     }
 }
 
