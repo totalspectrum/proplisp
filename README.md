@@ -211,3 +211,7 @@ There is also a very simple editor provided. Commands are:
 ^C: abort
 ^H: backspace; if you backspace past the beginning of line the previous
     lines will be shown
+
+During execution, pressing ^B or ^C will break out of eval and return to
+the REPL. (^C is usual, but propeller-load catches this so if you're using
+that try ^B instead)

@@ -1,14 +1,15 @@
 //
 // lisp interpreter REPL (read-evaluate-print loop)
 // 
-#include <stdio.h>
 #include <stdlib.h>
 #include "lisp.h"
 
 #ifdef __propeller__
+#include "PropSerial/FullDuplexSerial.h"
 #include <propeller.h>
 #define ARENA_SIZE 4096
 #else
+#include <stdio.h>
 #define ARENA_SIZE 32768
 #define MAX_SCRIPT_SIZE 100000
 #endif
@@ -21,7 +22,7 @@
 #include <unistd.h>
 struct termios origt, rawt;
 
-void setraw() {
+static void setraw() {
     setvbuf(stdout, NULL, _IONBF, 0);
     setvbuf(stdin, NULL, _IONBF, 0);
 
@@ -30,25 +31,41 @@ void setraw() {
     cfmakeraw(&rawt);
     tcsetattr(fileno(stdin), TCSAFLUSH, &rawt);
 }
-void setcooked() {
+static void setcooked() {
     tcsetattr(fileno(stdin), TCSAFLUSH, &origt);
-}
-#elif defined(__propeller__)
-void setraw() {
-    stdin->_flag &= ~_IOCOOKED;
-}
-void setcooked() {
-    stdin->_flag |= _IOCOOKED;
 }
 #else
 // make these whatever you need to switch terminal to
 // raw or cooked mode
-void setraw() {
+static void setraw() {
 }
-void setcooked() {
+static void setcooked() {
 }
 #endif
 
+#ifdef __propeller__
+FullDuplexSerial fds;
+
+int peekchar() {
+    return FullDuplexSerial_rx(&fds);
+}
+int inchar() {
+    int c;
+    do {
+        c = peekchar();
+    } while (c < 0);
+    return c;
+}
+void outchar(int c) {
+    if (c == '\n') {
+        FullDuplexSerial_tx(&fds, 13);
+    }
+    FullDuplexSerial_tx(&fds, c);
+}
+#else
+int peekchar() {
+    return -1;
+}
 int inchar() {
     return getchar();
 }
@@ -58,6 +75,7 @@ void outchar(int c) {
     }
     putchar(c);
 }
+#endif
 
 #ifdef MAX_SCRIPT_SIZE
 char script[MAX_SCRIPT_SIZE];
@@ -266,21 +284,22 @@ main(int argc, char **argv)
     Cell *err;
     int i;
 
-#ifndef __propeller__
+#ifdef __propeller__
+    FullDuplexSerial_start(&fds, 31, 30, 0, 115200);
 #endif
     err = Lisp_Init(arena, sizeof(arena));
     for (i = 0; err && defs[i].name; i++) {
         err = Lisp_DefineCFunc(&defs[i]);
     }
     if (err == NULL) {
-        printf("Initialization of interpreter failed!\n");
+        outstr("Initialization of interpreter failed!\n");
         return 1;
     }
 #ifdef __propeller__
     REPL();
 #else
     if (argc > 2) {
-        printf("Usage: proplisp [file]\n");
+        outstr("Usage: proplisp [file]\n");
     }
     if (argv[1]) {
         runscript(argv[1]);

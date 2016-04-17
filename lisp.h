@@ -26,7 +26,16 @@ typedef struct {
 } LispCFunction;
 
 // external functions defined by the app
+
+// print 1 character
 extern void outchar(int c);
+// print a string
+extern void outstr(const char *);
+// read one character from stdin
+extern int inchar();
+// peek to see if a character is available, return -1 if not,
+// the char if it is
+extern int peekchar();
 
 // defined by us 
 void printcstr(const char *s);

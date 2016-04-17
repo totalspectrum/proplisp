@@ -3,6 +3,11 @@
 #include <string.h>
 #include <ctype.h>
 #include "lisp.h"
+#include <setjmp.h>
+
+#ifdef __propeller__
+jmp_buf break_buf;
+#endif
 
 static Cell *doLookup(Cell *name, Cell *env, int stopOnBoundary);
 
@@ -194,16 +199,13 @@ Cell *NewCFunc(Cell *name, LispCFunction *f) {
     return AllocRawPair(CELL_CFUNC, FromPtr(name), FromPtr(f));
 }
 #define printchar(c) outchar(c)
+#define readchar() inchar()
 
 void printcstr(const char *s) {
     int c;
     while ( (c = *s++) != 0 ) {
         printchar(c);
     }
-}
-
-int readchar() {
-    return getchar();
 }
 
 Cell *CString(const char *str) {
@@ -881,6 +883,13 @@ Cell *Eval(Cell *expr, Cell *env)
     Cell *r;
     Cell *f, *args;
 
+#ifdef __propeller__
+    int c = peekchar();
+    if ( (c & 0xfe) == 2 ) {
+        // break
+        longjmp(break_buf, 1);
+    }
+#endif
     typ = GetType(expr);
     switch (typ) {
     case CELL_NUM:
@@ -1025,7 +1034,7 @@ Lisp_Init(void *arena, size_t arenasize)
     return lc->globalEnv;
 }
 
-#ifndef SMALL
+#ifndef __propeller__
 // useful for calling from gdb, so only for debugging
 void debug(Cell *x) {
     Lisp_Print(x);
@@ -1046,6 +1055,12 @@ Cell *Lisp_Run(const char *buffer, int printIt)
 {
     Cell *r = NULL;
 
+#ifdef __propeller__
+    if (setjmp(break_buf) == 1) {
+        outstr("\nbreak\n");
+        return NULL;
+    }
+#endif
     for(;;) {
         while (isspace(*buffer)) buffer++;
         if (!*buffer) break;
