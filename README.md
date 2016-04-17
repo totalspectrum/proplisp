@@ -32,7 +32,7 @@ A particular value `#t` is the "preferred" form of true.
 The interpreter defines the following functions by default:
 
 ```
-(define x e) -- defines x to have the value e
+(define x e) -- defines x to have the value e; always works in global environment
 (set! x e)   -- changes a previous definition of x to have new value e
 (eval e)  -- evaluates e, returns the result
 (cons a b) -- returns a pair with a as the head, b as the tail
@@ -76,12 +76,11 @@ Some Notes
 ----------
 A few things to note about this version of Lisp:
 
-`define` will create a new definition in the current scope; it will never
-create a definition in a containing scope (e.g. a function cannot use
-`define` to create a global definition).
+`define` will always create a global definition; it should be used inside
+functions only for very special purposes
 
-`setq`, however, will change any existing definition it can find, even
-in a higher scope. However, it will not create a new definition.
+`setq`, will change any existing definition it can find, even
+in a higher scope. It will not create a new definition.
 
 The arithmetic operators `+`, `-`, and so on, require exactly two arguments.
 Unary `-` can be achieved with `(- 0 x)`.

@@ -5,6 +5,11 @@
 #include "lisp.h"
 #include <setjmp.h>
 
+// define this to do some brain-dead optimization on
+// lambda bodies (basically just looking up variables ahead
+// of time)
+#define OPTIMIZE_LAMBDA 1
+
 #ifdef __propeller__
 jmp_buf break_buf;
 #endif
@@ -411,7 +416,7 @@ Cell *Tail(Cell *x)
 // define a new value, or redefine an existing one
 // in the current environment
 // returns the value defined
-Cell *Define(Cell *name, Cell *val, Cell *env)
+static Cell *doDefine(Cell *name, Cell *val, Cell *env)
 {
     Cell *holder;
     Cell *x;
@@ -666,32 +671,34 @@ static Cell *Compile(Cell *body, Cell *exclude, Cell *env) {
 #ifdef OPTIMIZE_LAMBDA
     // we need to avoid capture of arguments
     // FIXME: what about defines within the body!?
-    
+    //        avoid that by just making define global
     Cell *r, *t, *h;
     if (!body) {
         return NULL;
     }
     if (GetType(body) == CELL_SYMBOL) {
         // avoid arg capture
-        if (args && Contains(exclude, body)) {
+        if (exclude && Contains(exclude, body)) {
             return body;
         }
         // OK, see if it's in the parent environment
         r = Lookup(body, env);
         if (r) {
-            // we'd like to return r, but this will be fatal if
+            // note that this won't work fatal if
             // the user has defined a local variable that shadows r
-            // possible workarounds: (1) parse defines and
-            // add them to the exclude list, (2) only capture C
-            // functions and disallow redefining them
-            // for now punt and do neither
+            // but is not a parameter; we work around this
+            // by just disallowing it (let expands to a lambda,
+            // so it's a parameter, and we've made define work
+            // on the top level environment only)
             return r;
         }
     }
     if (IsPair(body)) {
         h = GetHead(body);
         t = GetTail(body);
-        return Cons(Compile(h, args, env), Compile(t, args, env));
+        h = Compile(h, exclude, env);
+        t = Compile(t, exclude, env);
+        return Cons(h, t);
     }
 #endif
     return body;
@@ -813,7 +820,7 @@ static Cell *DefineOneArg(Cell *name, Cell *val, Cell *newenv, Cell *origenv)
     } else {
         val = Eval(val, origenv);
     }
-    return Define(name, val, newenv);
+    return doDefine(name, val, newenv);
 }
 
 static Cell *DefineArgs(Cell *names, Cell *args, Cell *newenv, Cell *origenv)
@@ -848,13 +855,13 @@ static Cell *applyLambda(Cell *fn, Cell *args, Cell *env)
         if (Head(argdescrip) == lc->globalQuote) {
             // this one argument gets the whole list, unevaluated
             argdescrip = Tail(argdescrip);
-            Define(Head(argdescrip), args, newenv);
+            doDefine(Head(argdescrip), args, newenv);
         } else if (!DefineArgs(argdescrip, args, newenv, env)) {
             return NULL;
         }
     } else {
         // this argument gets the whole list, evaluated
-        Define(argdescrip, EvalList(args, env), newenv);
+        doDefine(argdescrip, EvalList(args, env), newenv);
     }
     return Eval(body, newenv);
 }
@@ -963,6 +970,8 @@ Cell *Le(int x, int y) { return (x <= y) ? lc->globalTrue : NULL; }
 Cell *Gt(int x, int y) { return (x > y) ? lc->globalTrue : NULL; }
 Cell *Ge(int x, int y) { return (x >= y) ? lc->globalTrue : NULL; }
 
+Cell *Define(Cell *name, Cell *val) { return doDefine(name, val, lc->globalEnv); }
+
 LispCFunction cdefs[] = {
     // quote must come first
     { "quote", "ccc", (GenericFunc)Quote },
@@ -972,7 +981,7 @@ LispCFunction cdefs[] = {
     { "gcfree", "n", (GenericFunc)GCFree },
     { "eval", "cce", (GenericFunc)Eval },
     { "print", "cv", (GenericFunc)PrintList },
-    { "define", "cCce", (GenericFunc)Define },
+    { "define", "cCc", (GenericFunc)Define },
     { "number?", "cc", (GenericFunc)IsNumber },
     { "pair?", "cc", (GenericFunc)IsPair },
     { "begin", "cve", (GenericFunc)Sequence },
@@ -1001,7 +1010,7 @@ Cell *Lisp_DefineCFunc(LispCFunction *f)
     Cell *name, *val;
     name = CSymbol(f->name);
     val = NewCFunc(name, f);
-    Define(name, val, lc->globalEnv);
+    Define(name, val);
     return val;
 }
 
@@ -1021,8 +1030,8 @@ Lisp_Init(void *arena, size_t arenasize)
     lc->globalEnv = Cons(NULL, NULL);
     lc->globalTrue = CString("#t");
 
-    Define(lc->globalTrue, lc->globalTrue, lc->globalEnv);
-    Define(CSymbol("nl"), CString("\n"), lc->globalEnv);
+    Define(lc->globalTrue, lc->globalTrue);
+    Define(CSymbol("nl"), CString("\n"));
     f = cdefs;
     lc->globalQuote = Lisp_DefineCFunc(f);
     f++;
