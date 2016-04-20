@@ -1,0 +1,8 @@
+*.exe
+*.elf
+*.o
+*.zip
+*.binary
+*~
+fibo.h
+lisp

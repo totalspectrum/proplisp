@@ -14,7 +14,7 @@ lisp: main.c lisp.c lisp.h cell.h
 	$(CC) $(CFLAGS) -o lisp main.c lisp.c
 
 clean:
-	rm -f lisp *.o
+	rm -f lisp *.o *.elf
 
 test: lisp
 	(cd Test; ./runtests.sh)
@@ -25,6 +25,15 @@ test: lisp
 # who only have old Spin tools
 #
 
+MODEL=cmm
+
 lisp.elf: main.c lisp.c PropSerial/FullDuplexSerial.c lisp.h cell.h
-	propeller-elf-gcc -Os -mcmm -o lisp.elf main.c lisp.c PropSerial/FullDuplexSerial.c
+	propeller-elf-gcc -Os -m$(MODEL) -o lisp.elf main.c lisp.c PropSerial/FullDuplexSerial.c
 	propeller-load -s lisp.elf
+
+fibo.elf: fibo.c fibo.h lisp.c lisp.h cell.h
+	propeller-elf-gcc -Os -m$(MODEL) -o fibo.elf fibo.c lisp.c
+	propeller-load -s fibo.elf
+
+fibo.h: fibo.lsp
+	xxd -i fibo.lsp > fibo.h
