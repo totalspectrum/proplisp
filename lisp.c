@@ -684,7 +684,7 @@ static Cell *Compile(Cell *body, Cell *exclude, Cell *env) {
         // OK, see if it's in the parent environment
         r = Lookup(body, env);
         if (r) {
-            // note that this won't work fatal if
+            // note that this won't work if
             // the user has defined a local variable that shadows r
             // but is not a parameter; we work around this
             // by just disallowing it (let expands to a lambda,
