@@ -1,9 +1,22 @@
 #ifndef CELL_H
 #define CELL_H
 
-#include <stdint.h>
+#ifdef __zpu__
+#define NO_STDINT
+#endif
 
-#ifdef __propeller__
+#ifndef NO_STDINT
+#include <stdint.h>
+#else
+typedef unsigned long long uint64_t;
+typedef long long int64_t;
+typedef unsigned int uint32_t;
+typedef int int32_t;
+typedef unsigned int uintptr_t;
+typedef int intptr_t;
+#endif
+
+#if defined(__propeller__) || defined(__zpu__)
 #define SMALL
 #endif
 
@@ -21,7 +34,6 @@
 typedef uint32_t Cell;
 typedef int32_t Num;
 typedef uint32_t UNum;
-#define INLINE
 
 #else
 // a Cell is a 64 bit integer, holding
@@ -37,8 +49,10 @@ typedef uint64_t Cell;
 typedef int64_t Num;
 typedef uint64_t UNum;
 
-#define INLINE inline
+#endif
 
+#ifndef INLINE
+#define INLINE inline
 #endif
 
 enum CellType {

@@ -8,6 +8,8 @@
 #include "PropSerial/FullDuplexSerial.h"
 #include <propeller.h>
 #define ARENA_SIZE 4096
+#elif defined(__zpu__)
+#define ARENA_SIZE 4096
 #else
 #include <stdio.h>
 #define ARENA_SIZE 32768
@@ -61,6 +63,19 @@ void outchar(int c) {
         FullDuplexSerial_tx(&fds, 13);
     }
     FullDuplexSerial_tx(&fds, c);
+}
+#elif defined(__zpu__)
+int peekchar() {
+    return -1;
+}
+int inchar() {
+    return getchar();
+}
+void outchar(int c) {
+    if (c == '\n') {
+        putchar('\r');
+    }
+    putchar(c);
 }
 #else
 int peekchar() {
@@ -295,7 +310,7 @@ main(int argc, char **argv)
         outstr("Initialization of interpreter failed!\n");
         return 1;
     }
-#ifdef __propeller__
+#ifdef SMALL
     REPL();
 #else
     if (argc > 2) {

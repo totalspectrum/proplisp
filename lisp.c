@@ -8,7 +8,7 @@
 // define this to do some brain-dead optimization on
 // lambda bodies (basically just looking up variables ahead
 // of time)
-#define OPTIMIZE_LAMBDA 1
+//#define OPTIMIZE_LAMBDA 1
 
 #ifdef __propeller__
 jmp_buf break_buf;
