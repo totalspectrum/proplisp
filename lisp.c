@@ -342,11 +342,22 @@ static void PrintSymbol(Cell *str) {
 
 static Cell *PrintList(Cell *str) {
     while (str) {
-        Lisp_Print(GetHead(str));
-        str = GetTail(str);
-        if (str) {
-            printchar(' ');
-        }
+        switch(GetType(str)) {
+        case CELL_PAIR:
+            Lisp_Print(GetHead(str));
+            str = GetTail(str);
+            if (str) {
+                if (GetType(str) == CELL_PAIR) {
+                    printchar(' ');
+                } else {
+                    printchar('.');
+                }
+            }
+            break;
+        default:
+            Lisp_Print(str);
+            str = NULL;
+        }   
     }
     return lc->globalTrue;
 }
