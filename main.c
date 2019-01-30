@@ -1,19 +1,23 @@
 //
 // lisp interpreter REPL (read-evaluate-print loop)
-// 
+//
+#include <stdio.h>
 #include <stdlib.h>
 #include "lisp.h"
 
 #ifdef __propeller__
-#include "PropSerial/FullDuplexSerial.h"
 #include <propeller.h>
 #define ARENA_SIZE 4096
 #elif defined(__zpu__)
 #define ARENA_SIZE 4096
 #else
-#include <stdio.h>
 #define ARENA_SIZE 32768
 #define MAX_SCRIPT_SIZE 100000
+#endif
+
+#if defined(__propeller__) && defined(__GNUC__)
+#define FULLDUPLEX_SERIAL
+#include "PropSerial/FullDuplexSerial.h"
 #endif
 
 // make these whatever you need to switch terminal to
@@ -45,11 +49,24 @@ static void setcooked() {
 }
 #endif
 
-#ifdef __propeller__
+#if defined(__propeller__)
+
+#ifdef __GNUC__
+#include "PropSerial/FullDuplexSerial.h"
 FullDuplexSerial fds;
+#define FDS_START(a, b, c, d) FullDuplexSerial_start(&fds, a, b, c, d)
+#define FDS_TX(c) FullDuplexSerial_tx(&fds, c)
+#define FDS_RX() FullDuplexSerial_rx(&fds)
+#endif
+#ifdef __FLEXC__
+struct __using("PropSerial/FullDuplexSerial.spin") fds;
+#define FDS_START(a, b, c, d) fds.start(a, b, c, d)
+#define FDS_TX(c) fds.tx(c)
+#define FDS_RX() fds.rx()
+#endif
 
 int peekchar() {
-    return FullDuplexSerial_rx(&fds);
+    return FDS_RX();
 }
 int inchar() {
     int c;
@@ -58,11 +75,11 @@ int inchar() {
     } while (c < 0);
     return c;
 }
-void outchar(int c) {
+void outchar(int c) {    
     if (c == '\n') {
-        FullDuplexSerial_tx(&fds, 13);
+        FDS_TX(13);
     }
-    FullDuplexSerial_tx(&fds, c);
+    FDS_TX(c);
 }
 #elif defined(__zpu__)
 int peekchar() {
@@ -126,7 +143,11 @@ static intptr_t getcnt_fn()
 // wait for ms millisconds
 static intptr_t waitms_fn(intptr_t ms)
 {
+#ifdef __FLEXC__
+    pausems(ms);
+#else    
     usleep(ms * 1000);
+#endif    
     return ms;
 }
 static intptr_t pinout_fn(intptr_t pin, intptr_t onoff)
@@ -167,7 +188,7 @@ LispCFunction defs[] = {
 #else
     { "dsqr",      "nnn", (GenericFunc)testfunc },
 #endif
-    { NULL, 0 }
+    { NULL, NULL, 0 }
 };
 
 //
@@ -300,7 +321,7 @@ main(int argc, char **argv)
     int i;
 
 #ifdef __propeller__
-    FullDuplexSerial_start(&fds, 31, 30, 0, 115200);
+    FDS_START(31, 30, 0, 115200);
 #endif
     err = Lisp_Init(arena, sizeof(arena));
     for (i = 0; err && defs[i].name; i++) {

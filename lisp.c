@@ -1,9 +1,13 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include "lisp.h"
+
 #include <string.h>
 #include <ctype.h>
-#include "lisp.h"
+
+#ifdef __propeller__
 #include <setjmp.h>
+#endif
 
 // define this to do some brain-dead optimization on
 // lambda bodies (basically just looking up variables ahead

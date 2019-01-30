@@ -4,7 +4,7 @@
 #include "fibo.h"
 
 #include <propeller.h>
-#define ARENA_SIZE 9000
+#define ARENA_SIZE 8000
 
 int inchar() {
     return -1;
@@ -24,7 +24,11 @@ static intptr_t getcnt_fn()
 // wait for ms millisconds
 static intptr_t waitms_fn(intptr_t ms)
 {
+#ifdef __FLEXC__
+    pausems(ms);
+#else    
     usleep(ms * 1000);
+#endif    
     return ms;
 }
 static intptr_t pinout_fn(intptr_t pin, intptr_t onoff)
