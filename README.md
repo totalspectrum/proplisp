@@ -6,7 +6,7 @@ machines. The initial target is boards using the Parallax Propeller,
 which has 32KB of RAM, but the code should easily be portable to other
 platforms such as the Arduino.
 
-proplisp is copyright 2016 Total Spectrum Software Inc. and released
+proplisp is copyright 2016-2019 Total Spectrum Software Inc. and released
 under the MIT license. See the LICENSE file for details.
 
 On the propeller, the interpreter code needs about 3K of memory in CMM
@@ -67,6 +67,9 @@ In the sample program provided for the Parallax Propeller,
 there are the following additional functions:
 ```
 (waitms n) -- wait for n milliseconds
+(pinhi p) -- drive pin p high
+(pinlo p) -- drive pin p low
+(pintoggel p) -- toggle output value of pin p
 (pinout p x) -- set pin p to low (if x == 0) or high (if x <> 0)
 (pinin p) -- return the value of input pin p (1 or 0)
 (getcnt)  -- get the low 28 bits of the current system timer value 

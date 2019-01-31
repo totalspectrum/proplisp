@@ -161,6 +161,50 @@ static intptr_t waitms_fn(intptr_t ms)
 #endif    
     return ms;
 }
+
+#ifdef __P2__
+static intptr_t pinhi_fn(intptr_t pin)
+{
+    __asm {
+        drvh pin
+    }
+    return 1;
+}
+static intptr_t pinlo_fn(intptr_t pin)
+{
+    __asm {
+        drvl pin
+    }
+    return 0;
+}
+static intptr_t pintoggle_fn(intptr_t pin)
+{
+    __asm {
+        drvnot pin
+    }
+    return 0;
+}
+static intptr_t pinout_fn(intptr_t pin, intptr_t onoff)
+{
+    if (onoff) {
+        pinhi_fn(pin);
+    } else {
+        pinlo_fn(pin);
+    }
+    return onoff;
+}
+static intptr_t pinin_fn(intptr_t pin)
+{
+    int rxbyte = -1;
+    __asm {
+        testp pin wc
+      if_c rdpin rxbyte, pin
+      if_c shr rxbyte, #24
+    }
+    return rxbyte;
+}
+
+#else
 static intptr_t pinout_fn(intptr_t pin, intptr_t onoff)
 {
     unsigned mask = 1<<pin;
@@ -170,14 +214,25 @@ static intptr_t pinout_fn(intptr_t pin, intptr_t onoff)
     } else {
         OUTA &= ~mask;
     }
-    return OUTA;
+    return onoff;
 }
+static intptr_t pintoggle_fn(intptr_t pin)
+{
+    unsigned mask = 1<<pin;
+    DIRA |= mask;
+    OUTA ^= mask;
+    return 0;
+}
+static intptr_t pinhi_fn(intptr_t pin) { return pinout_fn(pin, 1); }
+static intptr_t pinlo_fn(intptr_t pin) { return pinout_fn(pin, 0); }
+
 static intptr_t pinin_fn(intptr_t pin)
 {
     unsigned mask=1<<pin;
     DIRA &= ~mask;
     return (INA & mask) ? 1 : 0;
 }
+#endif
 
 #else
 // compute a function of two variables
@@ -194,6 +249,9 @@ LispCFunction defs[] = {
 #ifdef __propeller__
     { "getcnt",    "n",   (GenericFunc)getcnt_fn },
     { "pinout",    "nnn", (GenericFunc)pinout_fn },
+    { "pinlo",     "nn",  (GenericFunc)pinlo_fn },
+    { "pinhi",     "nn",  (GenericFunc)pinhi_fn },
+    { "pintoggle", "nn",  (GenericFunc)pintoggle_fn },
     { "pinin",     "nn",  (GenericFunc)pinin_fn },
     { "waitms",    "nn",  (GenericFunc)waitms_fn },
 #else
