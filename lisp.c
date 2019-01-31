@@ -63,7 +63,7 @@ static void setcooked() {
 FullDuplexSerial fds;
 #define FDS_START(a, b, c, d) FullDuplexSerial_start(&fds, a, b, c, d)
 #define FDS_TX(c) FullDuplexSerial_tx(&fds, c)
-#define FDS_RX() FullDuplexSerial_rx(&fds)
+#define FDS_RX() FullDuplexSerial_rxcheck(&fds)
 #endif
 #ifdef __FLEXC__
 #ifdef __P2__
