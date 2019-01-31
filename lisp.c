@@ -73,7 +73,7 @@ struct __using("PropSerial/FullDuplexSerial.spin") fds;
 #endif
 #define FDS_START(a, b, c, d) fds.start(a, b, c, d)
 #define FDS_TX(c) fds.tx(c)
-#define FDS_RX() fds.rx()
+#define FDS_RX() fds.rxcheck()
 #endif
 
 int peekchar() {
