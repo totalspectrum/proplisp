@@ -907,6 +907,7 @@ Cell *Eval(Cell *expr, Cell *env)
 
 #ifdef __propeller__
     int c = peekchar();
+    // the test below checks for either ^B or ^C
     if ( (c & 0xfe) == 2 ) {
         // break
         longjmp(break_buf, 1);
@@ -1080,8 +1081,8 @@ Cell *Lisp_Run(const char *buffer, int printIt)
     Cell *r = NULL;
 
 #ifdef __propeller__
-    if (setjmp(break_buf) == 1) {
-        outstr("\nbreak\n");
+    if (setjmp(break_buf) != 0) {
+        outstr("\r\nbreak");
         return NULL;
     }
 #endif
