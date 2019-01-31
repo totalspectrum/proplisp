@@ -1045,7 +1045,7 @@ Lisp_Init(void *arena, size_t arenasize)
     lc->globalEnv = Cons(NULL, NULL);
     lc->globalTrue = CString("#t");
 
-    Define(lc->globalTrue, lc->globalTrue);
+    Define(CSymbol("#t"), lc->globalTrue);
     Define(CSymbol("nl"), CString("\n"));
     f = cdefs;
     lc->globalQuote = Lisp_DefineCFunc(f);
