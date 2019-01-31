@@ -170,6 +170,9 @@ void outchar(int c) { putchar(c); }
 Embedded systems may want to provide a definition that uses the serial port
 or an attached display.
 
+Link the application with `lisplib.c`, and have the application itself
+include `lisplib.h`.
+
 The application must initialize the interpreter with `Lisp_Init` before
 making any other calls. `Lisp_Init` takes two parameters: the base
 of a memory region the interpreter can use, and the size of that region.
