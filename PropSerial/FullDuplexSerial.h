@@ -35,7 +35,7 @@ typedef struct FullDuplexSerial {
   void FullDuplexSerial_stop(FullDuplexSerial *self);
   void FullDuplexSerial_txflush(FullDuplexSerial *self);
   void FullDuplexSerial_rxflush(FullDuplexSerial *self);
-  int32_t FullDuplexSerial_rx(FullDuplexSerial *self);
+  int32_t FullDuplexSerial_rxcheck(FullDuplexSerial *self);
   void FullDuplexSerial_tx(FullDuplexSerial *self, int32_t txbyte);
   void FullDuplexSerial_str(FullDuplexSerial *self, int32_t stringptr);
 #endif

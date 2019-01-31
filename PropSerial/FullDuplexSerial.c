@@ -104,12 +104,12 @@ void FullDuplexSerial_txflush(FullDuplexSerial *self)
 void FullDuplexSerial_rxflush(FullDuplexSerial *self)
 {
   // Flush receive buffer
-  while (FullDuplexSerial_rx(self) >= 0) {
+  while (FullDuplexSerial_rxcheck(self) >= 0) {
     Yield__();
   }
 }
 
-int32_t FullDuplexSerial_rx(FullDuplexSerial *self)
+int32_t FullDuplexSerial_rxcheck(FullDuplexSerial *self)
 {
   int32_t rxbyte = 0;
   // Check if byte received (never waits)
@@ -134,9 +134,6 @@ void FullDuplexSerial_tx(FullDuplexSerial *self, int32_t txbyte)
   self->tx_buffer[self->tx_head] = txbyte;
   self->tx_head = (self->tx_head + 1) & 0xf;
   lockclr(self->txlock);
-  if (self->rxtx_mode & 0x8) {
-    FullDuplexSerial_rx(self);
-  }
 }
 
 void FullDuplexSerial_str(FullDuplexSerial *self, int32_t stringptr)
