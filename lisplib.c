@@ -1,3 +1,7 @@
+//
+// Copyright 2016-2019 Total Spectrum Software Inc.
+// MIT Licensed; see LICENSE for exact terms
+//
 #include <stdio.h>
 #include <stdlib.h>
 #include "lisplib.h"

@@ -11,7 +11,7 @@
 #ifdef __P2__
 #define P2_TARGET_MHZ 160
 #include "sys/p2es_clk.h"
-#define ARENA_SIZE 4096
+#define ARENA_SIZE 32768
 #else
 #define ARENA_SIZE 4096
 #endif
@@ -398,7 +398,7 @@ main(int argc, char **argv)
 #else
     FDS_START(31, 30, 0, 115200);
 #endif
-    fds.str("hello, world!\r\n");
+    outstr("PropLisp started!\r\n");
 #endif
     err = Lisp_Init(arena, sizeof(arena));
     for (i = 0; err && defs[i].name; i++) {

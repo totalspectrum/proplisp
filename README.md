@@ -209,7 +209,8 @@ The Sample Program
 ==================
 
 The sample `lisp.c` illustrates some of the features of the interpreter
-and how to hook it up to your C application.
+and how to hook it up to your C application. It also happens to be an
+interactive Lisp interpreter for the Propeller.
 
 There is also a very simple editor provided. Commands are:
 
@@ -221,3 +222,41 @@ There is also a very simple editor provided. Commands are:
 During execution, pressing ^B or ^C will break out of eval and return to
 the REPL. (^C is usual, but propeller-load catches this so if you're using
 that try ^B instead)
+
+## Some demos to try
+
+### Print Hello
+```
+(print "hello" nl)
+```
+
+### Toggle a pin forever
+```
+(while #t (begin (pintoggle 1)(waitms 500)))
+```
+This toggles pin 1 every 500 milliseconds. To break, press control-B or
+control-C on the terminal.
+
+### Define a loop forever macro
+```
+(define forever
+ (lambda 'f
+  (while #t (eval (cons 'begin f))))
+
+(forever (print "hello" nl))
+```
+This will print "hello" over and over, until you interrupt it with control-C.
+
+It works by using the special features of proplisp. The argument to lambda
+(`'f`) is quoted, and so is not immediately evaluated; instead it is passed
+as a complete list to the body of the function. Inside the function we
+append this list to `begin` and then evaluate it repeatedly. So for example:
+```
+(forever (print "a") (print "b"))
+```
+expands to
+```
+(while #t (eval (begin (print "a")(print "b"))))
+```
+which prints `a` and `b` repeatedly forever.
+
