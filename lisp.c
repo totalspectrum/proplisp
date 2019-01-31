@@ -6,18 +6,25 @@
 #include "lisplib.h"
 
 #ifdef __propeller__
+
 #include <propeller.h>
-#define ARENA_SIZE 4096
-#elif defined(__zpu__)
+#ifdef __P2__
+#define P2_TARGET_MHZ 160
+#include "sys/p2es_clk.h"
 #define ARENA_SIZE 4096
 #else
-#define ARENA_SIZE 32768
-#define MAX_SCRIPT_SIZE 100000
+#define ARENA_SIZE 4096
 #endif
 
-#if defined(__propeller__) && defined(__GNUC__)
-#define FULLDUPLEX_SERIAL
-#include "PropSerial/FullDuplexSerial.h"
+#elif defined(__zpu__)
+
+#define ARENA_SIZE 4096
+
+#else
+
+#define ARENA_SIZE 65536
+#define MAX_SCRIPT_SIZE 100000
+
 #endif
 
 // make these whatever you need to switch terminal to
@@ -59,7 +66,11 @@ FullDuplexSerial fds;
 #define FDS_RX() FullDuplexSerial_rx(&fds)
 #endif
 #ifdef __FLEXC__
+#ifdef __P2__
+struct __using("PropSerial/SmartSerial.spin2") fds;
+#else
 struct __using("PropSerial/FullDuplexSerial.spin") fds;
+#endif
 #define FDS_START(a, b, c, d) fds.start(a, b, c, d)
 #define FDS_TX(c) fds.tx(c)
 #define FDS_RX() fds.rx()
@@ -321,7 +332,15 @@ main(int argc, char **argv)
     int i;
 
 #ifdef __propeller__
+#ifdef __P2__
+    clkset(_SETFREQ, _CLOCKFREQ);
+    //clkset(0x10c3f04, 160000000);
+    FDS_START(63, 62, 0, 230400);
+    pausems(200);
+#else
     FDS_START(31, 30, 0, 115200);
+#endif
+    fds.str("hello, world!\r\n");
 #endif
     err = Lisp_Init(arena, sizeof(arena));
     for (i = 0; err && defs[i].name; i++) {
