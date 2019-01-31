@@ -1,6 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
-#include "lisp.h"
+#include "lisplib.h"
 #include "fibo.h"
 
 #include <propeller.h>

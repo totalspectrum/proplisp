@@ -127,14 +127,14 @@ static INLINE void SetTail(Cell *ptr, Cell *val) {
     Cell r = *ptr;
     uint32_t v = FromPtr(val);
     r &= ~ ((Cell)PTRMASK<<4);
-    r |= v<<4;
+    r |= ((Cell)v)<<4;
     *ptr = r;
 }
 static INLINE void SetHead(Cell *ptr, Cell *val) {
     Cell r = *ptr;
     uint32_t v = FromPtr(val);
     r &= ~ ((Cell)PTRMASK<<HEADSHIFT);
-    r |= (Cell)v<<HEADSHIFT;
+    r |= ((Cell)v)<<HEADSHIFT;
     *ptr = r;
 }
 

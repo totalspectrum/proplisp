@@ -10,8 +10,8 @@ CC=gcc -m32
 #CFLAGS= -g -Og -Wall
 CFLAGS= -g -Wall
 
-lisp: main.c lisp.c lisp.h cell.h
-	$(CC) $(CFLAGS) -o lisp main.c lisp.c
+lisp: main.c lisplib.c lisplib.h cell.h
+	$(CC) $(CFLAGS) -o lisp main.c lisplib.c
 
 clean:
 	rm -f lisp *.o *.elf
@@ -27,12 +27,12 @@ test: lisp
 
 MODEL=cmm
 
-lisp.elf: main.c lisp.c PropSerial/FullDuplexSerial.c lisp.h cell.h
-	propeller-elf-gcc -Os -m$(MODEL) -o lisp.elf main.c lisp.c PropSerial/FullDuplexSerial.c
+lisp.elf: main.c lisplib.c PropSerial/FullDuplexSerial.c lisplib.h cell.h
+	propeller-elf-gcc -Os -m$(MODEL) -o lisp.elf main.c lisplib.c PropSerial/FullDuplexSerial.c
 	propeller-load -s lisp.elf
 
-fibo.elf: fibo.c fibo.h lisp.c lisp.h cell.h
-	propeller-elf-gcc -Os -m$(MODEL) -o fibo.elf fibo.c lisp.c
+fibo.elf: fibo.c fibo.h lisplib.c lisplib.h cell.h
+	propeller-elf-gcc -Os -m$(MODEL) -o fibo.elf fibo.c lisplib.c
 	propeller-load -s fibo.elf
 
 fibo.h: fibo.lsp

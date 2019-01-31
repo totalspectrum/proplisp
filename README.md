@@ -12,7 +12,7 @@ under the MIT license. See the LICENSE file for details.
 On the propeller, the interpreter code needs about 3K of memory in CMM
 mode or 5K in LMM. On the x86-64 the interpreter code is 6K. The size
 of the workspace you give to the interpreter is up to you, although in
-practice it would be not very useful to use less than 2K or RAM. The
+practice it would be not very useful to use less than 2K of RAM. The
 processor stack is used as well, so it will need some space, especially
 if you use recursive functions.
 
@@ -79,7 +79,7 @@ A few things to note about this version of Lisp:
 `define` will always create a global definition; it should be used inside
 functions only for very special purposes
 
-`setq`, will change any existing definition it can find, even
+`set!`, will change any existing definition it can find, even
 in a higher scope. It will not create a new definition.
 
 The arithmetic operators `+`, `-`, and so on, require exactly two arguments.
@@ -98,7 +98,8 @@ If `args` is a symbol, then all parameters are evaluated and `args`
 is set to a list containing the results.
 
 If `args` is a quoted symbol, then it will be given a list of all
-parameters, unevaluated.
+parameters, unevaluated. This means that the `lambda` is really
+defining a macro of sorts.
 
 If `args` is a list of symbols or quoted symbols, then each symbol is
 set to the corresponding (evaluated) parameter, and each quoted symbol
@@ -201,7 +202,7 @@ is printed.
 The Sample Program
 ==================
 
-The sample main.c illustrates some of the features of the interpreter
+The sample `lisp.c` illustrates some of the features of the interpreter
 and how to hook it up to your C application.
 
 There is also a very simple editor provided. Commands are:

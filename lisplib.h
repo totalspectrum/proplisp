@@ -1,5 +1,5 @@
-#ifndef LISP_H
-#define LISP_H
+#ifndef LISPLIB_H
+#define LISPLIB_H
 
 #include "cell.h"
 

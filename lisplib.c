@@ -1,6 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
-#include "lisp.h"
+#include "lisplib.h"
 
 #include <string.h>
 #include <ctype.h>
@@ -72,7 +72,7 @@ static void CollectFree(void) {
 
 static void InitGC(void *base, size_t size) {
     lc->base = base;
-    lc->totalCells = size / sizeof(Cell);
+    lc->totalCells = (size / sizeof(Cell)) - 1; // reserve one for free list
     lc->stackTop = (uintptr_t *)&size;  // for garbage collection
     MarkFree();
     CollectFree();
