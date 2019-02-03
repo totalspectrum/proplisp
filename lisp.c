@@ -10,7 +10,7 @@
 #include <propeller.h>
 #ifdef __P2__
 #define P2_TARGET_MHZ 160
-#include "sys/p2es_clk.h"
+#include "sys/p2es_clock.h"
 #define ARENA_SIZE 32768
 #else
 #define ARENA_SIZE 4096
