@@ -4,12 +4,21 @@
 #include "fibo.h"
 
 #include <propeller.h>
-#define ARENA_SIZE 8000
+#ifdef __P2__
+#define P2_TARGET_MHZ 160
+#include "sys/p2es_clock.h"
+#define ARENA_SIZE 32768
+#else
+#define ARENA_SIZE 16000
+#endif
 
 int inchar() {
     return -1;
 }
 void outchar(int c) {
+    if (c == '\n') {
+        putchar('\r');
+    }
     putchar(c);
 }
 void outstr(const char *s) {
@@ -54,6 +63,7 @@ LispCFunction defs[] = {
     { "pinout",    "nnn", (GenericFunc)pinout_fn },
     { "pinin",     "nn",  (GenericFunc)pinin_fn },
     { "waitms",    "nn", (GenericFunc)waitms_fn },
+    { NULL, NULL, NULL },
 };
 
 char arena[ARENA_SIZE];
@@ -63,7 +73,13 @@ main(int argc, char **argv)
 {
     Cell *err;
     int i;
-    
+
+#ifdef __P2__
+    clkset(_SETFREQ, _CLOCKFREQ);
+    _setbaud(230400);
+    pausems(100);
+#endif
+    outstr("proplisp recursive fibo test\n");
     err = Lisp_Init(arena, sizeof(arena));
     for (i = 0; err && defs[i].name; i++) {
         err = Lisp_DefineCFunc(&defs[i]);

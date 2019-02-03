@@ -18,3 +18,5 @@
    (set! elapsed (- (getcnt) elapsed))
    (print "fibo(" n ") = " r (calcms elapsed) "ms (" elapsed " cycles)" nl)
    (set! n (+ n 1))))
+
+(print "done fibo test" nl)
