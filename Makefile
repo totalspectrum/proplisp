@@ -14,7 +14,7 @@ lisp: lisp.c lisplib.c lisplib.h cell.h
 	$(CC) $(CFLAGS) -o lisp lisp.c lisplib.c
 
 clean:
-	rm -f lisp *.o *.elf
+	rm -f lisp *.o *.elf *.binary *.p2asm *.pasm
 
 test: lisp
 	(cd Test; ./runtests.sh)
